@@ -6,7 +6,7 @@ set -e
 rm -f "$AIRFLOW_HOME/airflow-webserver.pid"
 rm -f "$AIRFLOW_HOME/airflow-scheduler.pid"
 
-# Wait a moment for processes to fully terminate
+# 2. Wait a moment for processes to fully terminate
 sleep 2
 
 # 3. Initialize/Upgrade DB

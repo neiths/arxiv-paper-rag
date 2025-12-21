@@ -4,10 +4,10 @@ services:
     image: opensearchproject/opensearch:2.19.0
     container_name: rag-opensearch
     environment:
-      - discovery.type=single-node
-      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
-      - DISABLE_SECURITY_PLUGIN=true
-      - bootstrap.memory_lock=true
+      - discovery.type=${OPENSEARCH_DISCOVERY_TYPE:-single-node}
+      - OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS}
+      - DISABLE_SECURITY_PLUGIN=${OPENSEARCH_DISABLE_SECURITY_PLUGIN:-true}
+      - bootstrap.memory_lock=${OPENSEARCH_BOOTSTRAP_MEMORY_LOCK:-true}
     ports:
       - "9200:9200"
       - "9600:9600"
@@ -78,7 +78,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U rag_user -d rag_db" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 5s
       timeout: 5s
       retries: 10
