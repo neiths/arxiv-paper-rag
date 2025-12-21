@@ -25,14 +25,15 @@ airflow users create \
 
 # 5. Create PostgreSQL Connection
 echo "Creating PostgreSQL connection..."
-airflow connections delete 'postgres_default' || true
+# Delete existing connection if it exists (ignore if not found)
+airflow connections delete 'postgres_default' 2>/dev/null || echo "No existing connection to delete."
 airflow connections add 'postgres_default' \
     --conn-type 'postgres' \
     --conn-host "${POSTGRES_HOST:-postgres}" \
     --conn-port "${POSTGRES_PORT:-5432}" \
     --conn-login "${POSTGRES_USER:-rag_user}" \
     --conn-password "${POSTGRES_PASSWORD:-rag_password}" \
-    --conn-schema "${POSTGRES_DB:-rag_db}" || echo "PostgreSQL connection creation failed."
+    --conn-schema "${POSTGRES_DB:-rag_db}"
 
 # 6. Start the Webserver in the background
 echo "Starting Airflow webserver..."
