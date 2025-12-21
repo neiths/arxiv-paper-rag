@@ -296,11 +296,11 @@ docker compose up -d ollama
 # 2. List available models
 docker exec -it rag-ollama ollama list
 
-# 3. Pull a model (example: llama3.2)
-docker exec -it rag-ollama ollama pull llama3.2:1b
+# 3. Pull a model (example: smollm2) - small model for testing
+docker exec -it rag-ollama ollama pull smollm2:135m
 
 # 4. Test inference
-docker exec -it rag-ollama ollama run llama3.2:1b "Hello, how are you?"
+docker exec -it rag-ollama ollama run smollm2:135m "Hello, how are you?"
 
 # 5. Check API
 curl http://localhost:11434/api/tags
