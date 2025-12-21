@@ -30,7 +30,7 @@ The Airflow Dockerfile (`airflow/Dockerfile`) performs:
 The entrypoint script handles:
 
 1. **Cleanup**: Kills existing Airflow processes and removes stale PID files
-2. **Database Init**: Runs `airflow db init` to create metadata tables
+2. **Database Init/Migrate**: Runs `airflow db migrate` to initialize the metadata database on first run and apply schema upgrades on subsequent runs
 3. **Admin User**: Creates `admin/admin` user (idempotent)
 4. **Service Start**: Launches webserver (daemon) and scheduler (foreground)
 
