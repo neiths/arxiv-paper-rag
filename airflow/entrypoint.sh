@@ -2,31 +2,32 @@
 
 set -e
 
-# Clean up any existing PID files and processes
-echo "Cleaning up any existing Airflow processes..."
-pkill -f "airflow webserver" || true
-pkill -f "airflow scheduler" || true
-rm -f /opt/airflow/airflow-webserver.pid
-rm -f /opt/airflow/airflow-scheduler.pid
+# 1. Clean up stale PID files left over from previous crashes
+rm -f "$AIRFLOW_HOME/airflow-webserver.pid"
+rm -f "$AIRFLOW_HOME/airflow-scheduler.pid"
 
 # Wait a moment for processes to fully terminate
 sleep 2
 
-# Initialize Airflow database
-echo "Initializing Airflow database..."
-airflow db init
+# 3. Initialize/Upgrade DB
+echo "Running DB Migrations..."
+airflow db migrate
 
-# Create admin user with admin/admin credentials
-echo "Creating admin user..."
+# 4. Create Admin User
+echo "Ensuring Admin user exists..."
 airflow users create \
     --username admin \
     --firstname Admin \
     --lastname User \
     --role Admin \
     --email admin@example.com \
-    --password admin || echo "Admin user already exists"
+    --password admin || echo "Admin user already exists or creation failed."
 
-# Start webserver and scheduler
-echo "Starting Airflow webserver and scheduler..."
-airflow webserver --port 8080 --daemon &
-airflow scheduler
+# 5. Start the Webserver in the background
+echo "Starting Airflow webserver..."
+airflow webserver --port 8080 &
+
+# 6. Start the Scheduler as the "foreground" process
+# Using 'exec' ensures the scheduler receives OS signals directly
+echo "Starting Airflow scheduler..."
+exec airflow scheduler
