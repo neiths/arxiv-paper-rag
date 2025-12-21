@@ -110,6 +110,11 @@ services:
       - AIRFLOW_HOME=/opt/airflow
       # Container hostnames for Airflow
       - POSTGRES_DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-rag_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-rag_password}
+      - POSTGRES_DB=${POSTGRES_DB:-rag_db}
       - OPENSEARCH_HOST=http://opensearch:9200
       - PYTHONPATH=/opt/airflow/src
     volumes:

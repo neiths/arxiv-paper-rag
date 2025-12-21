@@ -6,9 +6,9 @@ This is a simple DAG to verify Airflow is working correctly.
 
 from datetime import datetime, timedelta
 
-import psycopg2
 import requests
 from airflow import DAG
+from airflow.hooks.postgres_hook import PostgresHook
 from airflow.operators.python import PythonOperator
 
 
@@ -25,14 +25,9 @@ def check_services():
         response = requests.get("http://rag-api:8000/api/v1/health", timeout=5)
         print(f"API Health: {response.status_code}")
 
-        # Check database connection
-        conn = psycopg2.connect(
-            host="postgres",
-            port=5432,
-            database="rag_db",
-            user="rag_user",
-            password="rag_password"
-        )
+        # Check database connection using Airflow Connection
+        postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
+        conn = postgres_hook.get_conn()
         print("Database: Connected successfully")
         conn.close()
 

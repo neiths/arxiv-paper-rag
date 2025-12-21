@@ -23,11 +23,22 @@ airflow users create \
     --email admin@example.com \
     --password admin || echo "Admin user already exists or creation failed."
 
-# 5. Start the Webserver in the background
+# 5. Create PostgreSQL Connection
+echo "Creating PostgreSQL connection..."
+airflow connections delete 'postgres_default' || true
+airflow connections add 'postgres_default' \
+    --conn-type 'postgres' \
+    --conn-host "${POSTGRES_HOST:-postgres}" \
+    --conn-port "${POSTGRES_PORT:-5432}" \
+    --conn-login "${POSTGRES_USER:-rag_user}" \
+    --conn-password "${POSTGRES_PASSWORD:-rag_password}" \
+    --conn-schema "${POSTGRES_DB:-rag_db}" || echo "PostgreSQL connection creation failed."
+
+# 6. Start the Webserver in the background
 echo "Starting Airflow webserver..."
 airflow webserver --port 8080 &
 
-# 6. Start the Scheduler as the "foreground" process
+# 7. Start the Scheduler as the "foreground" process
 # Using 'exec' ensures the scheduler receives OS signals directly
 echo "Starting Airflow scheduler..."
 exec airflow scheduler
