@@ -86,13 +86,37 @@ POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@postgres:5432/
 
 **Configuration**:
 - **Image**: `opensearchproject/opensearch:2.19.0`
-- **Ports**: `9200` (HTTP), `9600` (Performance Analyzer)
+- **Ports**: `9200` REST API (search, index, vector queries), `9600` performance metrics
 - **Mode**: Single-node cluster
 - **Security**: Disabled for development (`DISABLE_SECURITY_PLUGIN=true`)
 
 **Memory Settings**:
 - Java heap: 512MB min/max (`-Xms512m -Xmx512m`)
 - Memory lock: Unlimited (prevents swapping)
+
+rule of thumb:
+- Heap size should be set to 50% of available RAM, but not exceed 32GB.
+
+**discovery.type**: Set to `single-node` for standalone operation
+
+**disable_security_plugin**: Set to `true` to disable security features for local development
+
+**bootstrap.memory_lock**: Set to `true` to prevent memory swapping, improving performance
+
+- OpenSearch runs on java (JVM) that java stores its data in RAM (heap memory). 
+- If the OS starts swapping memory to disk, it can severely degrade performance.
+- **Memory locking** is dangerous if abused, so a process could lock all RAM. that limit is controlled by ulimit settings.
+
+**ulimit settings**: Configured to allow unlimited memory locking and increase file descriptors for better performance
+
+- `ulimit` = how much the OS allows a process to use or lock
+
+    | Value  | Meaning              |
+    | ------ | -------------------- |
+    | `soft` | Default usable limit |
+    | `hard` | Absolute max limit   |
+    | `-1`   | Unlimited            |
+
 
 ---
 
@@ -240,8 +264,14 @@ curl http://localhost:9200/_cat/indices?v
 # 4. Create a test index
 curl -X PUT http://localhost:9200/test-index
 
+# PowerShell
+iwr -Method PUT -Uri "http://localhost:9200/test-index"
+
 # 5. Delete test index
 curl -X DELETE http://localhost:9200/test-index
+
+# PowerShell
+iwr -Method DEL -Uri "http://localhost:9200/test-index"
 ```
 
 ### Test OpenSearch Dashboards
