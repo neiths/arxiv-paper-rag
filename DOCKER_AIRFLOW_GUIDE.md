@@ -1,0 +1,605 @@
+# Docker Compose & Airflow Setup Guide
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Services Explained](#services-explained)
+- [Running the Stack](#running-the-stack)
+- [Testing Individual Components](#testing-individual-components)
+- [Airflow Deep Dive](#airflow-deep-dive)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Overview
+
+This project uses **Docker Compose** to orchestrate a complete RAG (Retrieval-Augmented Generation) system with Apache Airflow for workflow orchestration. The stack includes:
+
+- **API Service**: FastAPI backend for the RAG application
+- **PostgreSQL**: Relational database for structured data and Airflow metadata
+- **OpenSearch**: Vector search engine for document embeddings
+- **OpenSearch Dashboards**: UI for OpenSearch visualization
+- **Ollama**: Local LLM inference server
+- **Apache Airflow**: Workflow orchestration for data pipelines
+
+---
+
+## Architecture
+
+### Network Configuration
+
+All services run on a **bridge network** called `rag-network`, enabling inter-service communication using container names as hostnames.
+
+### Data Persistence
+
+The following Docker volumes ensure data persists across container restarts:
+
+| Volume | Purpose |
+|--------|---------|
+| `postgres_data` | PostgreSQL database files |
+| `opensearch_data` | OpenSearch indices and data |
+| `ollama_data` | Downloaded LLM models |
+| `airflow_logs` | Airflow task execution logs |
+
+---
+
+## Services Explained
+
+### 1. **API Service** (`rag-api`)
+
+**Purpose**: Main FastAPI application providing RAG functionality
+
+**Configuration**:
+- **Port**: `8000:8000`
+- **Build Context**: Root directory (`.`)
+- **Dependencies**: Waits for PostgreSQL and OpenSearch to be healthy
+- **Health Check**: HTTP GET to `/api/v1/health`
+
+**Environment Variables**:
+```bash
+OPENSEARCH_HOST=http://opensearch:9200
+OLLAMA_HOST=http://ollama:11434
+POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db
+```
+
+---
+
+### 2. **PostgreSQL** (`rag-postgres`)
+
+**Purpose**: Primary database for application data and Airflow metadata
+
+**Configuration**:
+- **Image**: `postgres:16-alpine`
+- **Port**: `5432:5432`
+- **Database**: `rag_db`
+- **User**: `rag_user`
+- **Password**: `rag_password`
+
+**Health Check**: `pg_isready` command checks database availability
+
+---
+
+### 3. **OpenSearch** (`rag-opensearch`)
+
+**Purpose**: Vector search engine for document embeddings and semantic search
+
+**Configuration**:
+- **Image**: `opensearchproject/opensearch:2.19.0`
+- **Ports**: `9200` (HTTP), `9600` (Performance Analyzer)
+- **Mode**: Single-node cluster
+- **Security**: Disabled for development (`DISABLE_SECURITY_PLUGIN=true`)
+
+**Memory Settings**:
+- Java heap: 512MB min/max (`-Xms512m -Xmx512m`)
+- Memory lock: Unlimited (prevents swapping)
+
+---
+
+### 4. **OpenSearch Dashboards** (`rag-dashboards`)
+
+**Purpose**: Web UI for visualizing and managing OpenSearch data
+
+**Configuration**:
+- **Image**: `opensearchproject/opensearch-dashboards:2.19.0`
+- **Port**: `5601:5601`
+- **Connected to**: `opensearch:9200`
+
+**Access**: http://localhost:5601
+
+---
+
+### 5. **Ollama** (`rag-ollama`)
+
+**Purpose**: Local LLM inference server for running open-source models
+
+**Configuration**:
+- **Image**: `ollama/ollama:0.11.2`
+- **Port**: `11434:11434`
+- **Models Storage**: Persisted in `ollama_data` volume
+
+**Health Check**: `ollama list` command
+
+---
+
+### 6. **Apache Airflow** (`rag-airflow`)
+
+**Purpose**: Orchestrate data pipelines, PDF processing, and arXiv paper fetching
+
+**Configuration**:
+- **Build Context**: `./airflow`
+- **Port**: `8081:8080` (mapped to avoid conflict with default 8080)
+- **User**: UID/GID `50000` (configurable via `user` parameter)
+- **Dependencies**: PostgreSQL (for metadata), OpenSearch, API
+
+**Volumes**:
+```yaml
+- ./airflow/dags:/opt/airflow/dags          # DAG definitions
+- airflow_logs:/opt/airflow/logs            # Task logs
+- ./airflow/plugins:/opt/airflow/plugins    # Custom plugins
+- ./src:/opt/airflow/src                    # Shared source code
+```
+
+**Access**: http://localhost:8081
+**Credentials**: `admin` / `admin` (set in `entrypoint.sh`)
+
+---
+
+## Running the Stack
+
+### Prerequisites
+
+- Docker Desktop or Docker Engine installed
+- Docker Compose v2+
+- At least 4GB RAM available for containers
+
+### Full Stack Startup
+
+```bash
+# 1. Start all services
+docker compose up -d
+
+# 2. Check service status
+docker compose ps
+
+# 3. View logs for all services
+docker compose logs -f
+
+# 4. View logs for a specific service
+docker compose logs -f airflow
+```
+
+### Service Startup Order
+
+Docker Compose automatically handles dependencies with health checks:
+
+1. **PostgreSQL** starts first (required by API and Airflow)
+2. **OpenSearch** starts in parallel
+3. **Ollama** starts independently
+4. **OpenSearch Dashboards** waits for OpenSearch
+5. **API** waits for PostgreSQL and OpenSearch
+6. **Airflow** waits for PostgreSQL, OpenSearch, and optionally API
+
+### Shutdown
+
+```bash
+# Stop all services (keeps data)
+docker compose down
+
+# Stop and remove volumes (deletes all data)
+docker compose down -v
+```
+
+---
+
+## Testing Individual Components
+
+### Test PostgreSQL
+
+```bash
+# 1. Start only PostgreSQL
+docker compose up -d postgres
+
+# 2. Connect to database
+docker exec -it rag-postgres psql -U rag_user -d rag_db
+
+# 3. Run a test query
+SELECT version();
+
+# 4. Exit
+\q
+```
+
+### Test OpenSearch
+
+```bash
+# 1. Start OpenSearch
+docker compose up -d opensearch
+
+# 2. Check cluster health
+curl http://localhost:9200/_cluster/health?pretty
+
+# 3. List indices
+curl http://localhost:9200/_cat/indices?v
+
+# 4. Create a test index
+curl -X PUT http://localhost:9200/test-index
+
+# 5. Delete test index
+curl -X DELETE http://localhost:9200/test-index
+```
+
+### Test OpenSearch Dashboards
+
+```bash
+# 1. Start OpenSearch and Dashboards
+docker compose up -d opensearch opensearch-dashboards
+
+# 2. Access UI
+# Open browser to: http://localhost:5601
+
+# 3. Check status via API
+curl http://localhost:5601/api/status
+```
+
+### Test Ollama
+
+```bash
+# 1. Start Ollama
+docker compose up -d ollama
+
+# 2. List available models
+docker exec -it rag-ollama ollama list
+
+# 3. Pull a model (example: llama3.2)
+docker exec -it rag-ollama ollama pull llama3.2:1b
+
+# 4. Test inference
+docker exec -it rag-ollama ollama run llama3.2:1b "Hello, how are you?"
+
+# 5. Check API
+curl http://localhost:11434/api/tags
+```
+
+### Test API Service
+
+```bash
+# 1. Start dependencies first
+docker compose up -d postgres opensearch ollama
+
+# 2. Start API service
+docker compose up -d api
+
+# 3. Check health endpoint
+curl http://localhost:8000/api/v1/health
+
+# 4. View API logs
+docker compose logs -f api
+```
+
+### Test Airflow
+
+```bash
+# 1. Start dependencies
+docker compose up -d postgres opensearch
+
+# 2. Start Airflow
+docker compose up -d airflow
+
+# 3. Watch initialization logs
+docker compose logs -f airflow
+
+# 4. Access web UI
+# Open browser to: http://localhost:8081
+# Login: admin / admin
+
+# 5. Test CLI access
+docker exec -it rag-airflow airflow version
+
+# 6. List DAGs
+docker exec -it rag-airflow airflow dags list
+
+# 7. Trigger test DAG
+docker exec -it rag-airflow airflow dags trigger hello_world_week1
+```
+
+---
+
+## Airflow Deep Dive
+
+### Directory Structure
+
+```
+airflow/
+├── Dockerfile              # Custom Airflow image
+├── entrypoint.sh          # Initialization script
+├── requirements-airflow.txt  # Python dependencies
+├── README.md              # Airflow-specific docs
+├── init-db.sql            # Database setup (if needed)
+├── dags/                  # DAG definitions
+│   └── hello_world_dag.py # Test DAG
+└── plugins/               # Custom operators/hooks
+```
+
+### Dockerfile Breakdown
+
+The Airflow Dockerfile (`airflow/Dockerfile`) performs:
+
+1. **Base Image**: Python 3.12 slim
+2. **System Dependencies**: Build tools, PostgreSQL libs, Poppler (PDF), Tesseract (OCR)
+3. **Airflow Installation**: Version 2.10.3 with PostgreSQL support
+4. **User Setup**: Creates `airflow` user (UID/GID 50000)
+5. **Project Dependencies**: Installs from `requirements-airflow.txt`
+6. **Entrypoint**: Copies and executes `entrypoint.sh`
+
+### Entrypoint Script (`entrypoint.sh`)
+
+The entrypoint script handles:
+
+1. **Cleanup**: Kills existing Airflow processes and removes stale PID files
+2. **Database Init**: Runs `airflow db init` to create metadata tables
+3. **Admin User**: Creates `admin/admin` user (idempotent)
+4. **Service Start**: Launches webserver (daemon) and scheduler (foreground)
+
+> **Note**: The script now uses Unix line endings (LF) to prevent the "no such file or directory" error on Linux containers.
+
+### Python Dependencies
+
+From `requirements-airflow.txt`:
+
+| Package | Purpose |
+|---------|---------|
+| `httpx` | HTTP client for API calls |
+| `sqlalchemy` | Database ORM |
+| `pydantic` | Data validation |
+| `docling` | PDF processing |
+| `opensearch-py` | OpenSearch client |
+| `psycopg2-binary` | PostgreSQL driver |
+
+### Sample DAG: Hello World
+
+The `hello_world_dag.py` demonstrates:
+
+**Tasks**:
+1. **hello_world**: Prints a test message
+2. **check_services**: Verifies connectivity to API and PostgreSQL
+
+**Schedule**: Manual trigger only (`schedule=None`)
+
+**Tags**: `week1`, `testing`
+
+**Running the DAG**:
+```bash
+# Via CLI
+docker exec -it rag-airflow airflow dags trigger hello_world_week1
+
+# Via Web UI
+# 1. Go to http://localhost:8081
+# 2. Find "hello_world_week1" DAG
+# 3. Click play button
+```
+
+### Airflow Environment Variables
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `AIRFLOW_HOME` | `/opt/airflow` | Airflow installation directory |
+| `PYTHONPATH` | `/opt/airflow/src` | Include shared source code |
+| `POSTGRES_DATABASE_URL` | `postgresql+psycopg2://...` | Database connection |
+| `OPENSEARCH_HOST` | `http://opensearch:9200` | Search engine endpoint |
+| `OLLAMA_HOST` | `http://ollama:11434` | LLM server endpoint |
+
+### Creating New DAGs
+
+1. **Create DAG file** in `airflow/dags/`:
+
+```python
+from datetime import datetime
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+
+def my_task():
+    print("My custom task")
+
+with DAG(
+    'my_dag',
+    start_date=datetime(2024, 1, 1),
+    schedule=None,
+    catchup=False,
+) as dag:
+    task = PythonOperator(
+        task_id='my_task',
+        python_callable=my_task,
+    )
+```
+
+2. **Wait for auto-detection** (Airflow scans `dags/` every 30 seconds)
+
+3. **Trigger via UI or CLI**
+
+### Accessing Shared Code
+
+DAGs can import from `src/` directory:
+
+```python
+# In your DAG
+import sys
+sys.path.insert(0, '/opt/airflow/src')
+
+from your_module import your_function
+```
+
+The `src/` directory is mounted as a volume: `./src:/opt/airflow/src`
+
+---
+
+## Troubleshooting
+
+### Issue: Airflow Entrypoint Error
+
+**Error**: `exec /entrypoint.sh: no such file or directory`
+
+**Cause**: Windows line endings (CRLF) in `entrypoint.sh`
+
+**Solution**: Script has been fixed with Unix line endings (LF). Rebuild:
+```bash
+docker compose build airflow
+docker compose up -d airflow
+```
+
+### Issue: Port Already in Use
+
+**Error**: `Bind for 0.0.0.0:8080 failed: port is already allocated`
+
+**Solution**: Change port mapping in `compose.yml`:
+```yaml
+ports:
+  - "8081:8080"  # Use 8081 instead of 8080
+```
+
+### Issue: Services Not Connecting
+
+**Symptoms**: API can't reach PostgreSQL, Airflow can't reach OpenSearch
+
+**Solution**: Ensure all services are on the same network:
+```bash
+docker network ls
+docker network inspect arxiv-paper-curator_rag-network
+```
+
+### Issue: Airflow Scheduler Not Running
+
+**Symptoms**: DAGs don't execute even when triggered
+
+**Debug**:
+```bash
+# Check scheduler logs
+docker compose logs -f airflow | grep scheduler
+
+# Restart Airflow
+docker compose restart airflow
+
+# Check scheduler process
+docker exec -it rag-airflow ps aux | grep scheduler
+```
+
+### Issue: OpenSearch Memory Errors
+
+**Error**: `max virtual memory areas vm.max_map_count [65530] is too low`
+
+**Solution**: Increase memory limits (Linux/WSL):
+```bash
+sudo sysctl -w vm.max_map_count=262144
+```
+
+For Docker Desktop (Mac/Windows): Increase Docker memory to at least 4GB in settings.
+
+### Issue: Volume Permission Denied
+
+**Symptoms**: Airflow can't write logs, PostgreSQL can't create files
+
+**Solution**: Check volume permissions:
+```bash
+# Linux/WSL: Set proper ownership
+sudo chown -R 50000:50000 ./airflow/logs
+
+# Or uncomment user line in compose.yml for Airflow
+```
+
+### Viewing Logs
+
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f airflow
+
+# Last N lines
+docker compose logs --tail=100 airflow
+
+# With timestamps
+docker compose logs -f -t airflow
+```
+
+### Resetting Everything
+
+```bash
+# Stop and remove containers, networks
+docker compose down
+
+# Remove all volumes (deletes data)
+docker compose down -v
+
+# Remove images (force rebuild)
+docker compose down --rmi all
+
+# Start fresh
+docker compose up -d --build
+```
+
+---
+
+## Quick Reference
+
+### Common Commands
+
+```bash
+# Start all services
+docker compose up -d
+
+# Stop all services
+docker compose down
+
+# Rebuild specific service
+docker compose build airflow
+
+# Restart service
+docker compose restart airflow
+
+# View logs
+docker compose logs -f airflow
+
+# Execute command in container
+docker exec -it rag-airflow bash
+
+# Check service health
+docker compose ps
+```
+
+### Service URLs
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| **Airflow Web UI** | http://localhost:8081 | admin / admin |
+| **API** | http://localhost:8000 | N/A |
+| **OpenSearch** | http://localhost:9200 | N/A |
+| **OpenSearch Dashboards** | http://localhost:5601 | N/A |
+| **Ollama** | http://localhost:11434 | N/A |
+| **PostgreSQL** | `localhost:5432` | rag_user / rag_password |
+
+### Database Connection String
+
+```
+postgresql://rag_user:rag_password@localhost:5432/rag_db
+```
+
+From within containers:
+```
+postgresql://rag_user:rag_password@postgres:5432/rag_db
+```
+
+---
+
+## Next Steps
+
+1. **Explore Airflow UI**: http://localhost:8081
+2. **Trigger Test DAG**: Run `hello_world_week1` to verify setup
+3. **Create Custom DAGs**: Add new workflow files to `airflow/dags/`
+4. **Monitor Logs**: Watch execution with `docker compose logs -f`
+5. **Scale Up**: Add more workers or services as needed
+
+For more details, see:
+- [Airflow Documentation](https://airflow.apache.org/docs/)
+- [Docker Compose Documentation](https://docs.docker.com/compose/)
+- [OpenSearch Documentation](https://opensearch.org/docs/)
