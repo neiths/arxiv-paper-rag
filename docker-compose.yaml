@@ -1,0 +1,33 @@
+services:
+
+  # PostgreSQL service
+  postgres:
+    image: postgres:16-alpine
+    container_name: rag-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-rag_db}
+      - POSTGRES_USER=${POSTGRES_USER:-rag_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-rag_password}
+      - POSTGRES_HOST_AUTH_METHOD=password
+      - PGDATA=${PGDATA:-/var/lib/postgresql/data/pgdata}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag_user -d rag_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+
+volumes:
+  postgres_data:
+
+networks:
+  rag-network:
+    driver: bridge

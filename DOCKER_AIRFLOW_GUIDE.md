@@ -206,6 +206,21 @@ docker exec -it rag-postgres psql -U rag_user -d rag_db
 # 3. Run a test query
 SELECT version();
 
+# list all databases
+\l
+
+# check connect to a specific database
+\c rag_db
+
+# check extensions
+\dx
+
+# create vector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
+# check extensions again
+\dx vector
+
 # 4. Exit
 \q
 ```
