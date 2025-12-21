@@ -63,6 +63,22 @@ OLLAMA_HOST=http://ollama:11434
 POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db
 ```
 
+### Test API Service
+
+```bash
+# 1. Start dependencies first
+docker compose up -d postgres opensearch ollama
+
+# 2. Start API service
+docker compose up -d api
+
+# 3. Check health endpoint
+curl http://localhost:8000/api/v1/health
+
+# 4. View API logs
+docker compose logs -f api
+```
+
 ---
 
 ### 2. **PostgreSQL** (`rag-postgres`)
@@ -77,6 +93,37 @@ POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@postgres:5432/
 - **Password**: `rag_password`
 
 **Health Check**: `pg_isready` command checks database availability
+
+### Test PostgreSQL
+
+```bash
+# 1. Start only PostgreSQL
+docker compose up -d postgres
+
+# 2. Connect to database
+docker exec -it rag-postgres psql -U rag_user -d rag_db
+
+# 3. Run a test query
+SELECT version();
+
+# list all databases
+\l
+
+# check connect to a specific database
+\c rag_db
+
+# check extensions
+\dx
+
+# create vector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
+# check extensions again
+\dx vector
+
+# 4. Exit
+\q
+```
 
 ---
 
@@ -117,6 +164,30 @@ rule of thumb:
     | `hard` | Absolute max limit   |
     | `-1`   | Unlimited            |
 
+### Test OpenSearch
+
+```bash
+# 1. Start OpenSearch
+docker compose up -d opensearch
+
+# 2. Check cluster health
+curl http://localhost:9200/_cluster/health?pretty
+
+# 3. List indices
+curl http://localhost:9200/_cat/indices?v
+
+# 4. Create a test index
+curl -X PUT http://localhost:9200/test-index
+
+# PowerShell
+iwr -Method PUT -Uri "http://localhost:9200/test-index"
+
+# 5. Delete test index
+curl -X DELETE http://localhost:9200/test-index
+
+# PowerShell
+iwr -Method DEL -Uri "http://localhost:9200/test-index"
+```
 
 ---
 
@@ -131,6 +202,19 @@ rule of thumb:
 
 **Access**: http://localhost:5601
 
+### Test OpenSearch Dashboards
+
+```bash
+# 1. Start OpenSearch and Dashboards
+docker compose up -d opensearch opensearch-dashboards
+
+# 2. Access UI
+# Open browser to: http://localhost:5601
+
+# 3. Check status via API
+curl http://localhost:5601/api/status
+```
+
 ---
 
 ### 5. **Ollama** (`rag-ollama`)
@@ -143,6 +227,25 @@ rule of thumb:
 - **Models Storage**: Persisted in `ollama_data` volume
 
 **Health Check**: `ollama list` command
+
+### Test Ollama
+
+```bash
+# 1. Start Ollama
+docker compose up -d ollama
+
+# 2. List available models
+docker exec -it rag-ollama ollama list
+
+# 3. Pull a model (example: smollm2) - small model for testing
+docker exec -it rag-ollama ollama pull smollm2:135m
+
+# 4. Test inference
+docker exec -it rag-ollama ollama run smollm2:135m "Hello, how are you?"
+
+# 5. Check API
+curl http://localhost:11434/api/tags
+```
 
 ---
 
@@ -166,6 +269,32 @@ rule of thumb:
 
 **Access**: http://localhost:8081
 **Credentials**: `admin` / `admin` (set in `entrypoint.sh`)
+
+### Test Airflow
+
+```bash
+# 1. Start dependencies
+docker compose up -d postgres opensearch
+
+# 2. Start Airflow
+docker compose up -d airflow
+
+# 3. Watch initialization logs
+docker compose logs -f airflow
+
+# 4. Access web UI
+# Open browser to: http://localhost:8081
+# Login: admin / admin
+
+# 5. Test CLI access
+docker exec -it rag-airflow airflow version
+
+# 6. List DAGs
+docker exec -it rag-airflow airflow dags list
+
+# 7. Trigger test DAG
+docker exec -it rag-airflow airflow dags trigger hello_world_week1
+```
 
 ---
 
@@ -216,139 +345,6 @@ docker compose down -v
 
 ---
 
-## Testing Individual Components
-
-### Test PostgreSQL
-
-```bash
-# 1. Start only PostgreSQL
-docker compose up -d postgres
-
-# 2. Connect to database
-docker exec -it rag-postgres psql -U rag_user -d rag_db
-
-# 3. Run a test query
-SELECT version();
-
-# list all databases
-\l
-
-# check connect to a specific database
-\c rag_db
-
-# check extensions
-\dx
-
-# create vector extension
-CREATE EXTENSION IF NOT EXISTS vector;
-
-# check extensions again
-\dx vector
-
-# 4. Exit
-\q
-```
-
-### Test OpenSearch
-
-```bash
-# 1. Start OpenSearch
-docker compose up -d opensearch
-
-# 2. Check cluster health
-curl http://localhost:9200/_cluster/health?pretty
-
-# 3. List indices
-curl http://localhost:9200/_cat/indices?v
-
-# 4. Create a test index
-curl -X PUT http://localhost:9200/test-index
-
-# PowerShell
-iwr -Method PUT -Uri "http://localhost:9200/test-index"
-
-# 5. Delete test index
-curl -X DELETE http://localhost:9200/test-index
-
-# PowerShell
-iwr -Method DEL -Uri "http://localhost:9200/test-index"
-```
-
-### Test OpenSearch Dashboards
-
-```bash
-# 1. Start OpenSearch and Dashboards
-docker compose up -d opensearch opensearch-dashboards
-
-# 2. Access UI
-# Open browser to: http://localhost:5601
-
-# 3. Check status via API
-curl http://localhost:5601/api/status
-```
-
-### Test Ollama
-
-```bash
-# 1. Start Ollama
-docker compose up -d ollama
-
-# 2. List available models
-docker exec -it rag-ollama ollama list
-
-# 3. Pull a model (example: smollm2) - small model for testing
-docker exec -it rag-ollama ollama pull smollm2:135m
-
-# 4. Test inference
-docker exec -it rag-ollama ollama run smollm2:135m "Hello, how are you?"
-
-# 5. Check API
-curl http://localhost:11434/api/tags
-```
-
-### Test API Service
-
-```bash
-# 1. Start dependencies first
-docker compose up -d postgres opensearch ollama
-
-# 2. Start API service
-docker compose up -d api
-
-# 3. Check health endpoint
-curl http://localhost:8000/api/v1/health
-
-# 4. View API logs
-docker compose logs -f api
-```
-
-### Test Airflow
-
-```bash
-# 1. Start dependencies
-docker compose up -d postgres opensearch
-
-# 2. Start Airflow
-docker compose up -d airflow
-
-# 3. Watch initialization logs
-docker compose logs -f airflow
-
-# 4. Access web UI
-# Open browser to: http://localhost:8081
-# Login: admin / admin
-
-# 5. Test CLI access
-docker exec -it rag-airflow airflow version
-
-# 6. List DAGs
-docker exec -it rag-airflow airflow dags list
-
-# 7. Trigger test DAG
-docker exec -it rag-airflow airflow dags trigger hello_world_week1
-```
-
----
 
 ## Airflow Deep Dive
 
