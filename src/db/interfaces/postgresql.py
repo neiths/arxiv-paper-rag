@@ -43,8 +43,8 @@ class PostgreSQLDataBase(BaseDataBaseInterface):
 
     def __init__(self, config: PostgreSQLSettings):
         self.config = config
-        self.engine = Optional[Engine] = None
-        self.session_factory = Optional[sessionmaker] = None
+        self.engine: Optional[Engine] = None
+        self.session_factory: Optional[sessionmaker] = None
 
     def startup(self) -> None:
         """Initialize the PostgreSQL database connection."""
