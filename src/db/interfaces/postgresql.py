@@ -4,8 +4,7 @@ from typing import Optional, Generator
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, sessionmaker, declarative_base
 from sqlalchemy.engine import Engine
 from sqlalchemy import create_engine, text, inspect
 
