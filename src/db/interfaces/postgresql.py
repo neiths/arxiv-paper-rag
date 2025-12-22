@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker, declarative_base
 from sqlalchemy.engine import Engine
 from sqlalchemy import create_engine, text, inspect
 
-from src.db.interfaces.base import BaseDataBaseInferface
+from src.db.interfaces.base import BaseDataBaseInterface
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class PostgreSQLSettings(BaseSettings):
 Base = declarative_base()
 
 
-class PostgreSQLDataBase(BaseDataBaseInferface):
+class PostgreSQLDataBase(BaseDataBaseInterface):
     """PostgreSQL database implementation."""
 
     def __init__(self, config: PostgreSQLSettings):

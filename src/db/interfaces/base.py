@@ -3,7 +3,7 @@ from typing import Any, ContextManager, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-class BaseDataBaseInferface(ABC):
+class BaseDataBaseInterface(ABC):
     """Base interface for database operations."""
     
     @abstractmethod
