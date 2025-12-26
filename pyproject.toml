@@ -1,5 +1,5 @@
 [project]
-name = "moai-zero-to-rag"
+name = "thienhb-zero-to-rag"
 version = "0.1.0"
 description = "Mother-of-AI Phase-1-Zero to RAG"
 requires-python = ">=3.12,<3.13"
