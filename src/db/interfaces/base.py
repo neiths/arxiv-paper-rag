@@ -17,4 +17,3 @@ class BaseDataBaseInterface(ABC):
     @abstractmethod
     def get_session(self) -> ContextManager[Session]:
         """Get a database session or connection."""
-        

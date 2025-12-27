@@ -72,6 +72,8 @@ class PaperRepository:
         :param paper_create: The PaperCreate schema object containing paper details.
         :return: The created or updated Paper object.
         """
+
+        # NOTE: implementing proper locking mechanisms to handle concurrent upserts safely.
         existing_paper = self.get_by_arxiv_id(paper_create.arxiv_id)
         if existing_paper:
             for key, value in paper_create.model_dump().items():

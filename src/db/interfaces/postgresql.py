@@ -92,8 +92,6 @@ class PostgreSQLDataBase(BaseDataBaseInterface):
                 )
 
             logger.info("PostgreSQL database initialized successfully.")
-            assert self.engine is not None
-
             logger.info(f"Database: {self.engine.url.database}")
             logger.info(f"Total tables: {', '.join(updated_tables) if updated_tables else 'None'}")
             logger.info("Database connection established successfully.")
