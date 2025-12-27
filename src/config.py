@@ -32,7 +32,7 @@ class Settings(DefaultSettings):
 
     # Ollama configuration
     ollama_host: str = "http://localhost:11434"
-    ollama_models: Union[str, List[str]] = Field(default=["gpt-oss:20b", "llama3.2:1b"])
+    ollama_models: Union[str, List[str]] = Field(default=["mistral:7b", "llama3.2:1b"])
     ollama_default_model: str = "llama3.2:1b"
     ollama_timeout: int = 300   # 5 minutes
 
