@@ -21,16 +21,18 @@ def get_database(request: Request) -> BaseDataBaseInterface:
     return request.app.state.database
 
 
-def get_db_session(request: Request) -> Generator[Session, None, None]:
+def get_db_session(database: Annotated[BaseDataBaseInterface, Depends(get_database)]) -> Generator[Session, None, None]:
+    """Get database session dependency."""
     with database.get_session() as session:
         yield session
 
-def get_opensearch_service(request: Request) -> OpenSearchService:
-    return getattr(request.app.state, "opensearch_service", None)
+
+# def get_opensearch_service(request: Request) -> OpenSearchService:
+#     return getattr(request.app.state, "opensearch_service", None)
 
 
 # Dependency type aliases for better type hints
 SettingsDep = Annotated[Settings, Depends(get_request_settings)]
 DatabaseDep = Annotated[BaseDataBaseInterface, Depends(get_database)]
 DBSessionDep = Annotated[Generator[Session, None, None], Depends(get_db_session)]
-OpenSearchServiceDep = Annotated[OpenSearchService, Depends(get_opensearch_service)]
+# OpenSearchServiceDep = Annotated[OpenSearchService, Depends(get_opensearch_service)]

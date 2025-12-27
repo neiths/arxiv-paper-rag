@@ -22,7 +22,7 @@ class Settings(DefaultSettings):
     service_name: str = "rag_api"
 
     # PostgresSQL configuration
-    postgres_database_url: str = "postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db"
+    postgres_database_url: str = "postgresql+psycopg2://rag_user:rag_password@localhost:5432/rag_db"
     postgres_echo_sql: bool = False
     postgres_pool_size: int = 20
     postgres_max_overflow: int = 0
