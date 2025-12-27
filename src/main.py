@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from src.config import get_settings
 from src.db.factory import make_database
-from src.routers import ask
+from src.routers import ask, papers
 
 
 logging.basicConfig(
@@ -43,6 +43,7 @@ app = FastAPI(
 
 
 app.include_router(ask.router, prefix="/ask", tags=["ask"])
+app.include_router(papers.router)
 
 
 if __name__ == "__main__":
