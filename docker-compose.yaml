@@ -1,5 +1,33 @@
 services:
 
+  # API service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${API_VERSION:-0.1.0}
+    image: arxiv-rag-api:${API_VERSION:-0.1.0}
+    container_name: rag-api
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - WORKERS=${API_WORKERS:-4}  # Configurable workers (default: 4)
+      - OPENSEARCH_HOST=http://opensearch:9200
+      - OLLAMA_HOST=http://ollama:11434
+      - POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db
+    # Health check is defined in Dockerfile
+    restart: unless-stopped
+    networks:
+      - rag-network
+
   opensearch:
     image: opensearchproject/opensearch:2.19.0
     container_name: rag-opensearch
