@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+test/
+tests/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+
+# Environment files
+.env
+.env.*
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+docker-compose*.yaml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Airflow (if not needed in API container)
+airflow/
+
+# Scripts (if not needed in runtime)
+scripts/
+
+# Misc
+*.log
+.DS_Store
