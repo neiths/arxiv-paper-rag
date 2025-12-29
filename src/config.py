@@ -45,6 +45,24 @@ class Settings(DefaultSettings):
         return v
 
 
+class ArxivSettings(DefaultSettings):
+    """Arxiv API client settings."""
+
+    base_url = "https://export.arxiv.org/api/query"
+    namespaces: dict = Field(
+        default={
+            "atom": "http://www.w3.org/2005/Atom",
+            "opensearch": "http://a9.com/-/spec/opensearch/1.1/",
+            "arxiv": "http://arxiv.org/schemas/atom",
+        }
+    )
+    pdf_cache_dir: str = "./data/arxiv_pdfs"
+    rate_limit_delay: float = 3.0  # seconds
+    timeout_seconds: int = 30
+    max_results: int = 100
+    search_category: str = "cs.AI"
+
+
 def get_settings() -> Settings:
     """Get application settings."""
     return Settings()
