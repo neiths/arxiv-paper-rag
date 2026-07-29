@@ -23,6 +23,7 @@ This project uses **Docker Compose** to orchestrate a complete RAG (Retrieval-Au
 - **OpenSearch**: Vector search engine for document embeddings
 - **OpenSearch Dashboards**: UI for OpenSearch visualization
 - **Ollama**: Local LLM inference server
+- **ArXiv Client**: Async client for fetching papers from the arXiv API
 - **Apache Airflow**: Workflow orchestration for data pipelines
 
 ---
@@ -271,6 +272,29 @@ curl http://localhost:11434/api/tags
 
 **Access**: http://localhost:8081
 **Credentials**: `admin` / `admin` (set in `entrypoint.sh`)
+
+---
+
+### 7. **ArXiv Client** (`ArxivClient`)
+
+**Purpose**: Async client for fetching papers from the arXiv API, including category searches, custom queries, paper lookups by ID, and PDF downloads with local caching.
+
+**Location**:
+- Client implementation: `src/services/arxiv/client.py`
+- Factory helper: `src/services/arxiv/factory.py`
+
+**Usage**:
+```python
+from src.services.arxiv.factory import make_arxiv_client
+
+arxiv_client = make_arxiv_client()
+papers = await arxiv_client.fetch_papers(max_results=10)
+```
+
+**Notes**:
+- Configuration comes from `src.config.ArxivSettings`
+- Requests are rate-limited to respect the arXiv API
+- PDF files are cached locally in the configured cache directory
 
 ### Test Airflow
 
