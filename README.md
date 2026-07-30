@@ -24,6 +24,7 @@ This project uses **Docker Compose** to orchestrate a complete RAG (Retrieval-Au
 - **OpenSearch Dashboards**: UI for OpenSearch visualization
 - **Ollama**: Local LLM inference server
 - **ArXiv Client**: Async client for fetching papers from the arXiv API
+- **Docling PDF Parser**: PDF content extraction service for scientific papers
 - **Apache Airflow**: Workflow orchestration for data pipelines
 
 ---
@@ -295,6 +296,32 @@ papers = await arxiv_client.fetch_papers(max_results=10)
 - Configuration comes from `src.config.ArxivSettings`
 - Requests are rate-limited to respect the arXiv API
 - PDF files are cached locally in the configured cache directory
+
+---
+
+### 8. **Docling PDF Parser** (`PDFParserService`)
+
+**Purpose**: Parse scientific PDFs into structured content (sections + full text) using Docling with validation for file size, PDF format, and page limits.
+
+**Location**:
+- Main parser service: `src/services/pdf_parser/parser.py`
+- Docling implementation: `src/services/pdf_parser/docling.py`
+- Factory helper: `src/services/pdf_parser/factory.py`
+
+**Usage**:
+```python
+from pathlib import Path
+
+from src.services.pdf_parser.factory import make_pdf_parser_service
+
+pdf_parser = make_pdf_parser_service()
+pdf_content = await pdf_parser.parse_pdf(Path("data/arxiv_pdfs/sample.pdf"))
+```
+
+**Notes**:
+- Configuration comes from `src.config` (`pdf_parser.max_pages`, `pdf_parser.max_file_size_mb`, `pdf_parser.do_ocr`, `pdf_parser.do_table_structure`)
+- Parser metadata is exposed via `parser_used=docling`
+- Intended for PDF content extraction, while paper metadata comes from arXiv API
 
 ### Test Airflow
 
