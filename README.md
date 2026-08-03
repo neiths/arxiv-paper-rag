@@ -23,6 +23,7 @@ This project uses **Docker Compose** to orchestrate a complete RAG (Retrieval-Au
 - **OpenSearch**: Vector search engine for document embeddings
 - **OpenSearch Dashboards**: UI for OpenSearch visualization
 - **Ollama**: Local LLM inference server
+- **Jina Embeddings Client**: Async client for generating 1024-dimension embeddings
 - **ArXiv Client**: Async client for fetching papers from the arXiv API
 - **Docling PDF Parser**: PDF content extraction service for scientific papers
 - **Apache Airflow**: Workflow orchestration for data pipelines
@@ -253,7 +254,33 @@ curl http://localhost:11434/api/tags
 
 ---
 
-### 6. **Apache Airflow** (`rag-airflow`)
+### 6. **Jina Embeddings Client** (`JinaEmbeddingsClient`)
+
+**Purpose**: Generate passage and query embeddings with Jina AI's embeddings API for hybrid search and vector indexing.
+
+**Location**:
+- Client implementation: `src/services/embeddings/jina_client.py`
+- Request/response models: `src/schemas/embeddings/models.py`
+
+**Usage**:
+```python
+from src.services.embeddings.jina_client import JinaEmbeddingsClient
+
+client = JinaEmbeddingsClient(api_key=settings.jina_api_key)
+
+async with client:
+    passage_embeddings = await client.embed_passages(["First paper chunk", "Second paper chunk"])
+    query_embedding = await client.embed_query("retrieval augmented generation")
+```
+
+**Notes**:
+- Uses the `jina-embeddings-v3` model
+- Embeddings are 1024 dimensions and are aligned with the OpenSearch vector index configuration
+- API key is configured in `src.config.Settings.jina_api_key`
+
+---
+
+### 7. **Apache Airflow** (`rag-airflow`)
 
 **Purpose**: Orchestrate data pipelines, PDF processing, and arXiv paper fetching
 
@@ -276,7 +303,7 @@ curl http://localhost:11434/api/tags
 
 ---
 
-### 7. **ArXiv Client** (`ArxivClient`)
+### 8. **ArXiv Client** (`ArxivClient`)
 
 **Purpose**: Async client for fetching papers from the arXiv API, including category searches, custom queries, paper lookups by ID, and PDF downloads with local caching.
 
@@ -299,7 +326,7 @@ papers = await arxiv_client.fetch_papers(max_results=10)
 
 ---
 
-### 8. **Docling PDF Parser** (`PDFParserService`)
+### 9. **Docling PDF Parser** (`PDFParserService`)
 
 **Purpose**: Parse scientific PDFs into structured content (sections + full text) using Docling with validation for file size, PDF format, and page limits.
 
