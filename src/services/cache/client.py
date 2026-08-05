@@ -31,3 +31,22 @@ class CacheClient:
         key_string = json.dumps(key_data, sort_keys=True)
         key_hash = hashlib.sha256(key_string.encode()).hexdigest()[:16]
         return f"exact_cache:{key_hash}"
+
+    async def store_response(self, request: AskRequest, response: AskResponse) -> bool:
+        """Store response for exact query matching."""
+        try:
+            cache_key = self._generate_cache_key(request)
+
+            # Simple Redis SET operation with TTL
+            success = self.redis.set(cache_key, response.model_dump_json(), ex=self.ttl)
+
+            if success:
+                logger.info(f"Stored response in exact cache with key {cache_key[:16]}...")
+                return True
+            else:
+                logger.warning(f"Failed to store response in cache")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error storing in cache: {e}")
+            return False
