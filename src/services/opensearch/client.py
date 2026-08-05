@@ -132,22 +132,89 @@ class OpenSearchClient:
             raise
 
     def search_papers(
-        self, 
-        query: str, 
-        size: int = 10, 
-        from_: int = 0, 
-        categories: Optional[List[str]] = None, 
-        latest: bool = True
+        self, query: str, size: int = 10, from_: int = 0, categories: Optional[List[str]] = None, latest: bool = True
     ) -> Dict[str, Any]:
         """BM25 search for papers."""
-        return self._search_bm25_only(
-            query=query, 
-            size=size, 
-            from_=from_, 
-            categories=categories, 
-            latest=latest
-        )
-    
+        return self._search_bm25_only(query=query, size=size, from_=from_, categories=categories, latest=latest)
+
+    def search_chunks_vector(
+        self, query_embedding: List[float], size: int = 10, categories: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Pure vector search on chunks.
+
+        :param query_embedding: Query embedding vector
+        :param size: Number of results
+        :param categories: Optional category filter
+        :returns: Search results
+        """
+        try:
+            # Build filter
+            filter_clause = []
+            if categories:
+                filter_clause.append({"terms": {"categories": categories}})
+
+            search_body = {
+                "size": size,
+                "query": {"knn": {"embedding": {"vector": query_embedding, "k": size}}},
+                "_source": {"excludes": ["embedding"]},
+            }
+
+            if filter_clause:
+                search_body["query"] = {"bool": {"must": [search_body["query"]], "filter": filter_clause}}
+
+            response = self.client.search(index=self.index_name, body=search_body)
+
+            results = {"total": response["hits"]["total"]["value"], "hits": []}
+
+            for hit in response["hits"]["hits"]:
+                chunk = hit["_source"]
+                chunk["score"] = hit["_score"]
+                chunk["chunk_id"] = hit["_id"]
+                results["hits"].append(chunk)
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Vector search error: {e}")
+            return {"total": 0, "hits": []}
+
+    def search_unified(
+        self,
+        query: str,
+        query_embedding: Optional[List[float]] = None,
+        size: int = 10,
+        from_: int = 0,
+        categories: Optional[List[str]] = None,
+        latest: bool = False,
+        use_hybrid: bool = True,
+        min_score: float = 0.0,
+    ) -> Dict[str, Any]:
+        """Unified search method supporting BM25, vector, and hybrid modes.
+
+        :param query: Text query for search
+        :param query_embedding: Optional embedding for vector/hybrid search
+        :param size: Number of results to return
+        :param from_: Offset for pagination
+        :param categories: Optional category filter
+        :param latest: Sort by date instead of relevance
+        :param use_hybrid: If True and embedding provided, use hybrid search
+        :param min_score: Minimum score threshold
+        :returns: Search results
+        """
+        try:
+            # If no embedding provided or hybrid disabled, use BM25 only
+            if not query_embedding or not use_hybrid:
+                return self._search_bm25_only(query=query, size=size, from_=from_, categories=categories, latest=latest)
+
+            # Use native OpenSearch hybrid search with RRF pipeline
+            return self._search_hybrid_native(
+                query=query, query_embedding=query_embedding, size=size, categories=categories, min_score=min_score
+            )
+
+        except Exception as e:
+            logger.error(f"Unified search error: {e}")
+            return {"total": 0, "hits": []}
+
     def _search_bm25_only(
         self, query: str, size: int, from_: int, categories: Optional[List[str]], latest: bool
     ) -> Dict[str, Any]:
@@ -178,3 +245,48 @@ class OpenSearchClient:
 
         logger.info(f"BM25 search for '{query[:50]}...' returned {results['total']} results")
         return results
+
+    def _search_hybrid_native(
+        self, query: str, query_embedding: List[float], size: int, categories: Optional[List[str]], min_score: float
+    ) -> Dict[str, Any]:
+        """Native OpenSearch hybrid search with RRF pipeline."""
+        builder = QueryBuilder(
+            query=query, size=size * 2, from_=0, categories=categories, latest_papers=False, search_chunks=True
+        )
+        bm25_search_body = builder.build()
+
+        bm25_query = bm25_search_body["query"]
+
+        hybrid_query = {"hybrid": {"queries": [bm25_query, {"knn": {"embedding": {"vector": query_embedding, "k": size * 2}}}]}}
+
+        search_body = {
+            "size": size,
+            "query": hybrid_query,
+            "_source": bm25_search_body["_source"],
+            "highlight": bm25_search_body["highlight"],
+        }
+
+        # Execute search with RRF pipeline
+        response = self.client.search(
+            index=self.index_name, body=search_body, params={"search_pipeline": HYBRID_RRF_PIPELINE["id"]}
+        )
+
+        results = {"total": response["hits"]["total"]["value"], "hits": []}
+
+        for hit in response["hits"]["hits"]:
+            if hit["_score"] < min_score:
+                continue
+
+            chunk = hit["_source"]
+            chunk["score"] = hit["_score"]
+            chunk["chunk_id"] = hit["_id"]
+
+            if "highlight" in hit:
+                chunk["highlights"] = hit["highlight"]
+
+            results["hits"].append(chunk)
+
+        results["total"] = len(results["hits"])
+        logger.info(f"Native hybrid search for '{query[:50]}...' returned {results['total']} results")
+        return results
+
