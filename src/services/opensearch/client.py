@@ -290,3 +290,106 @@ class OpenSearchClient:
         logger.info(f"Native hybrid search for '{query[:50]}...' returned {results['total']} results")
         return results
 
+    def search_chunks_hybrid(
+        self,
+        query: str,
+        query_embedding: List[float],
+        size: int = 10,
+        categories: Optional[List[str]] = None,
+        min_score: float = 0.0,
+    ) -> Dict[str, Any]:
+        """Hybrid search combining BM25 and vector similarity using native RRF."""
+        return self._search_hybrid_native(
+            query=query, query_embedding=query_embedding, size=size, categories=categories, min_score=min_score
+        )
+
+    def index_chunk(self, chunk_data: Dict[str, Any], embedding: List[float]) -> bool:
+        """Index a single chunk with its embedding.
+
+        :param chunk_data: Chunk data dictionary
+        :param embedding: Embedding vector
+        :returns: True if successful
+        """
+        try:
+            chunk_data["embedding"] = embedding
+
+            response = self.client.index(index=self.index_name, body=chunk_data, refresh=True)
+
+            return response["result"] in ["created", "updated"]
+
+        except Exception as e:
+            logger.error(f"Error indexing chunk: {e}")
+            return False
+
+    def bulk_index_chunks(self, chunks: List[Dict[str, Any]]) -> Dict[str, int]:
+        """Bulk index multiple chunks with embeddings.
+
+        :param chunks: List of dicts with 'chunk_data' and 'embedding'
+        :returns: Statistics
+        """
+        from opensearchpy import helpers
+
+        try:
+            actions = []
+            for chunk in chunks:
+                chunk_data = chunk["chunk_data"].copy()
+                chunk_data["embedding"] = chunk["embedding"]
+
+                action = {"_index": self.index_name, "_source": chunk_data}
+                actions.append(action)
+
+            success, failed = helpers.bulk(self.client, actions, refresh=True)
+
+            logger.info(f"Bulk indexed {success} chunks, {len(failed)} failed")
+            return {"success": success, "failed": len(failed)}
+
+        except Exception as e:
+            logger.error(f"Bulk chunk indexing error: {e}")
+            raise
+
+    def delete_paper_chunks(self, arxiv_id: str) -> bool:
+        """Delete all chunks for a specific paper.
+
+        :param arxiv_id: ArXiv ID of the paper
+        :returns: True if deletion was successful
+        """
+        try:
+            response = self.client.delete_by_query(
+                index=self.index_name, body={"query": {"term": {"arxiv_id": arxiv_id}}}, refresh=True
+            )
+
+            deleted = response.get("deleted", 0)
+            logger.info(f"Deleted {deleted} chunks for paper {arxiv_id}")
+            return deleted > 0
+
+        except Exception as e:
+            logger.error(f"Error deleting chunks: {e}")
+            return False
+
+    def get_chunks_by_paper(self, arxiv_id: str) -> List[Dict[str, Any]]:
+        """Get all chunks for a specific paper.
+
+        :param arxiv_id: ArXiv ID of the paper
+        :returns: List of chunks sorted by chunk_index
+        """
+        try:
+            search_body = {
+                "query": {"term": {"arxiv_id": arxiv_id}},
+                "size": 1000,
+                "sort": [{"chunk_index": "asc"}],
+                "_source": {"excludes": ["embedding"]},
+            }
+
+            response = self.client.search(index=self.index_name, body=search_body)
+
+            chunks = []
+            for hit in response["hits"]["hits"]:
+                chunk = hit["_source"]
+                chunk["chunk_id"] = hit["_id"]
+                chunks.append(chunk)
+
+            return chunks
+
+        except Exception as e:
+            logger.error(f"Error getting chunks: {e}")
+            return []
