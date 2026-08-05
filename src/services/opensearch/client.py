@@ -130,3 +130,51 @@ class OpenSearchClient:
         except Exception as e:
             logger.error(f"Error creating RRF pipeline: {e}")
             raise
+
+    def search_papers(
+        self, 
+        query: str, 
+        size: int = 10, 
+        from_: int = 0, 
+        categories: Optional[List[str]] = None, 
+        latest: bool = True
+    ) -> Dict[str, Any]:
+        """BM25 search for papers."""
+        return self._search_bm25_only(
+            query=query, 
+            size=size, 
+            from_=from_, 
+            categories=categories, 
+            latest=latest
+        )
+    
+    def _search_bm25_only(
+        self, query: str, size: int, from_: int, categories: Optional[List[str]], latest: bool
+    ) -> Dict[str, Any]:
+        """Pure BM25 search implementation."""
+        builder = QueryBuilder(
+            query=query,
+            size=size,
+            from_=from_,
+            categories=categories,
+            latest_papers=latest,
+            search_chunks=True,  # Enable chunk search mode
+        )
+        search_body = builder.build()
+
+        response = self.client.search(index=self.index_name, body=search_body)
+
+        results = {"total": response["hits"]["total"]["value"], "hits": []}
+
+        for hit in response["hits"]["hits"]:
+            chunk = hit["_source"]
+            chunk["score"] = hit["_score"]
+            chunk["chunk_id"] = hit["_id"]
+
+            if "highlight" in hit:
+                chunk["highlights"] = hit["highlight"]
+
+            results["hits"].append(chunk)
+
+        logger.info(f"BM25 search for '{query[:50]}...' returned {results['total']} results")
+        return results
