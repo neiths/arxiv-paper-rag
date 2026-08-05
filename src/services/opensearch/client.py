@@ -6,6 +6,9 @@ from typing import Any, Dict, List, Optional
 from opensearchpy import OpenSearch
 from src.config import Settings
 
+from .index_config_hybrid import ARXIV_PAPERS_CHUNKS_MAPPING, HYBRID_RRF_PIPELINE
+from .query_builder import QueryBuilder
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,3 +58,75 @@ class OpenSearchClient:
         except Exception as e:
             logger.error(f"Error getting index stats: {e}")
             return {"index_name": self.index_name, "exists": False, "document_count": 0, "error": str(e)}
+
+    def setup_indices(self, force: bool = False) -> Dict[str, bool]:
+        """Setup the hybrid search index and RRF pipeline."""
+        results = {}
+        results["hybrid_index"] = self._create_hybrid_index(force)
+        results["rrf_pipeline"] = self._create_rrf_pipeline(force)
+        return results
+
+    def _create_hybrid_index(self, force: bool = False) -> bool:
+        """Create hybrid index for all search types (BM25, vector, hybrid).
+
+        :param force: If True, recreate index even if it exists
+        :returns: True if created, False if already exists
+        """
+        try:
+            if force and self.client.indices.exists(index=self.index_name):
+                self.client.indices.delete(index=self.index_name)
+                logger.info(f"Deleted existing hybrid index: {self.index_name}")
+
+            if not self.client.indices.exists(index=self.index_name):
+                self.client.indices.create(index=self.index_name, body=ARXIV_PAPERS_CHUNKS_MAPPING)
+                logger.info(f"Created hybrid index: {self.index_name}")
+                return True
+
+            logger.info(f"Hybrid index already exists: {self.index_name}")
+            return False
+
+        except Exception as e:
+            # Handle race condition when multiple workers start simultaneously:
+            # all check exists() -> False, all try to create, only one succeeds.
+            if "resource_already_exists_exception" in str(e):
+                logger.info(f"Hybrid index already exists (created by another worker): {self.index_name}")
+                return False
+            logger.error(f"Error creating hybrid index: {e}")
+            raise
+
+    def _create_rrf_pipeline(self, force: bool = False) -> bool:
+        """Create RRF search pipeline for native hybrid search.
+
+        :param force: If True, recreate pipeline even if it exists
+        :returns: True if created, False if already exists
+        """
+        try:
+            pipeline_id = HYBRID_RRF_PIPELINE["id"]
+
+            if force:
+                try:
+                    self.client.ingest.get_pipeline(id=pipeline_id)
+                    self.client.ingest.delete_pipeline(id=pipeline_id)
+                    logger.info(f"Deleted existing RRF pipeline: {pipeline_id}")
+                except Exception:
+                    pass
+
+            try:
+                self.client.ingest.get_pipeline(id=pipeline_id)
+                logger.info(f"RRF pipeline already exists: {pipeline_id}")
+                return False
+            except Exception:
+                pass
+            pipeline_body = {
+                "description": HYBRID_RRF_PIPELINE["description"],
+                "phase_results_processors": HYBRID_RRF_PIPELINE["phase_results_processors"],
+            }
+
+            self.client.transport.perform_request("PUT", f"/_search/pipeline/{pipeline_id}", body=pipeline_body)
+
+            logger.info(f"Created RRF search pipeline: {pipeline_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error creating RRF pipeline: {e}")
+            raise
