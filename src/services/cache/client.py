@@ -50,3 +50,26 @@ class CacheClient:
         except Exception as e:
             logger.error(f"Error storing in cache: {e}")
             return False
+
+    async def find_cached_response(self, request: AskRequest) -> Optional[AskResponse]:
+        """Find cached response for exact query match."""
+        try:
+            cache_key = self._generate_cache_key(request)
+
+            # Simple Redis GET operation - O(1)
+            cached_response = self.redis.get(cache_key)
+
+            if cached_response:
+                try:
+                    response_data = json.loads(cached_response)
+                    logger.info(f"Cache hit for exact query match")
+                    return AskResponse(**response_data)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to deserialize cached response: {e}")
+                    return None
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error checking cache: {e}")
+            return None
