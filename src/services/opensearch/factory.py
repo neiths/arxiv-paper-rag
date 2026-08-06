@@ -1,7 +1,6 @@
 """Unified factory for OpenSearch client."""
 
 from functools import lru_cache
-from typing import Optional
 
 from src.config import Settings, get_settings
 
@@ -9,7 +8,7 @@ from .client import OpenSearchClient
 
 
 @lru_cache(maxsize=1)
-def make_opensearch_client(settings: Optional[Settings] = None) -> OpenSearchClient:
+def make_opensearch_client(settings: Settings | None = None) -> OpenSearchClient:
     """Factory function to create cached OpenSearch client.
 
     Uses lru_cache to maintain a singleton instance for efficiency.
@@ -23,7 +22,9 @@ def make_opensearch_client(settings: Optional[Settings] = None) -> OpenSearchCli
     return OpenSearchClient(host=settings.opensearch.host, settings=settings)
 
 
-def make_opensearch_client_fresh(settings: Optional[Settings] = None, host: Optional[str] = None) -> OpenSearchClient:
+def make_opensearch_client_fresh(
+    settings: Settings | None = None, host: str | None = None
+) -> OpenSearchClient:
     """Factory function to create a fresh OpenSearch client (not cached).
 
     Use this when you need a new client instance (e.g., for testing

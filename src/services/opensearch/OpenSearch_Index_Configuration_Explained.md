@@ -2,8 +2,8 @@
 
 This configuration defines an OpenSearch index designed for **hybrid search**, which combines:
 
-* **BM25 (keyword search)** for lexical matching.
-* **Vector search (KNN)** for semantic similarity using embeddings.
+- **BM25 (keyword search)** for lexical matching.
+- **Vector search (KNN)** for semantic similarity using embeddings.
 
 The goal is to retrieve relevant paper chunks even when the query does not contain the exact same words.
 
@@ -91,8 +91,8 @@ Primary Shard
 
 Replicas provide:
 
-* Fault tolerance
-* Higher search throughput
+- Fault tolerance
+- Higher search throughput
 
 Since this configuration is likely intended for development or experimentation, replicas are disabled.
 
@@ -255,8 +255,8 @@ Allowed:
 
 ```json
 {
-    "title": "...",
-    "authors": "..."
+  "title": "...",
+  "authors": "..."
 }
 ```
 
@@ -264,8 +264,8 @@ Rejected:
 
 ```json
 {
-    "title": "...",
-    "foo": "bar"
+  "title": "...",
+  "foo": "bar"
 }
 ```
 
@@ -376,8 +376,8 @@ Exact string
 
 Use:
 
-* `chunk_text` → full-text search
-* `chunk_text.keyword` → exact filtering or aggregations
+- `chunk_text` → full-text search
+- `chunk_text.keyword` → exact filtering or aggregations
 
 ---
 
@@ -508,15 +508,15 @@ Controls the number of connections each node has in the graph.
 
 Higher values:
 
-* Better recall
-* More memory usage
-* Slower indexing
+- Better recall
+- More memory usage
+- Slower indexing
 
 Lower values:
 
-* Less memory
-* Faster indexing
-* Lower search quality
+- Less memory
+- Faster indexing
+- Lower search quality
 
 ---
 
@@ -530,15 +530,15 @@ Controls how thoroughly the graph is built during indexing.
 
 Higher values:
 
-* Better graph quality
-* Higher recall
-* Slower indexing
-* Larger index
+- Better graph quality
+- Higher recall
+- Slower indexing
+- Larger index
 
 Lower values:
 
-* Faster indexing
-* Lower recall
+- Faster indexing
+- Lower recall
 
 This parameter affects indexing only, not search.
 
@@ -548,14 +548,14 @@ This parameter affects indexing only, not search.
 
 Additional fields provide context for each chunk:
 
-* `title` – Paper title, analyzed for text search.
-* `authors` – Author names, searchable and filterable.
-* `abstract` – Full paper abstract.
-* `categories` – arXiv categories (stored as `keyword` for exact filtering).
-* `published_date` – Publication date.
-* `section_title` – Section where the chunk came from (e.g., "Introduction", "Methodology").
-* `embedding_model` – Records which embedding model generated the vector, useful when multiple models are used.
-* `created_at` / `updated_at` – Timestamps for auditing and data management.
+- `title` – Paper title, analyzed for text search.
+- `authors` – Author names, searchable and filterable.
+- `abstract` – Full paper abstract.
+- `categories` – arXiv categories (stored as `keyword` for exact filtering).
+- `published_date` – Publication date.
+- `section_title` – Section where the chunk came from (e.g., "Introduction", "Methodology").
+- `embedding_model` – Records which embedding model generated the vector, useful when multiple models are used.
+- `created_at` / `updated_at` – Timestamps for auditing and data management.
 
 ---
 
@@ -581,8 +581,8 @@ Text Score
 
 This finds chunks containing words like:
 
-* reinforcement
-* learning
+- reinforcement
+- learning
 
 ---
 

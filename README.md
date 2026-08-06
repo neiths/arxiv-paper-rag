@@ -40,12 +40,12 @@ All services run on a **bridge network** called `rag-network`, enabling inter-se
 
 The following Docker volumes ensure data persists across container restarts:
 
-| Volume | Purpose |
-|--------|---------|
-| `postgres_data` | PostgreSQL database files |
+| Volume            | Purpose                     |
+| ----------------- | --------------------------- |
+| `postgres_data`   | PostgreSQL database files   |
 | `opensearch_data` | OpenSearch indices and data |
-| `ollama_data` | Downloaded LLM models |
-| `airflow_logs` | Airflow task execution logs |
+| `ollama_data`     | Downloaded LLM models       |
+| `airflow_logs`    | Airflow task execution logs |
 
 ---
 
@@ -56,12 +56,14 @@ The following Docker volumes ensure data persists across container restarts:
 **Purpose**: Main FastAPI application providing RAG functionality
 
 **Configuration**:
+
 - **Port**: `8000:8000`
 - **Build Context**: Root directory (`.`)
 - **Dependencies**: Waits for PostgreSQL and OpenSearch to be healthy
 - **Health Check**: HTTP GET to `/api/v1/health`
 
 **Environment Variables**:
+
 ```bash
 OPENSEARCH_HOST=http://opensearch:9200
 OLLAMA_HOST=http://ollama:11434
@@ -91,6 +93,7 @@ docker compose logs -f api
 **Purpose**: Primary database for application data and Airflow metadata
 
 **Configuration**:
+
 - **Image**: `postgres:16-alpine`
 - **Port**: `5432:5432`
 - **Database**: `rag_db`
@@ -137,16 +140,19 @@ CREATE EXTENSION IF NOT EXISTS vector;
 **Purpose**: Vector search engine for document embeddings and semantic search
 
 **Configuration**:
+
 - **Image**: `opensearchproject/opensearch:2.19.0`
 - **Ports**: `9200` REST API (search, index, vector queries), `9600` performance metrics
 - **Mode**: Single-node cluster
 - **Security**: Disabled for development (`DISABLE_SECURITY_PLUGIN=true`)
 
 **Memory Settings**:
+
 - Java heap: 512MB min/max (`-Xms512m -Xmx512m`)
 - Memory lock: Unlimited (prevents swapping)
 
 rule of thumb:
+
 - Heap size should be set to 50% of available RAM, but not exceed 32GB.
 
 **discovery.type**: Set to `single-node` for standalone operation
@@ -155,7 +161,7 @@ rule of thumb:
 
 **bootstrap.memory_lock**: Set to `true` to prevent memory swapping, improving performance
 
-- OpenSearch runs on java (JVM) that java stores its data in RAM (heap memory). 
+- OpenSearch runs on java (JVM) that java stores its data in RAM (heap memory).
 - If the OS starts swapping memory to disk, it can severely degrade performance.
 - **Memory locking** is dangerous if abused, so a process could lock all RAM. that limit is controlled by ulimit settings.
 
@@ -163,11 +169,11 @@ rule of thumb:
 
 - `ulimit` = how much the OS allows a process to use or lock
 
-    | Value  | Meaning              |
-    | ------ | -------------------- |
-    | `soft` | Default usable limit |
-    | `hard` | Absolute max limit   |
-    | `-1`   | Unlimited            |
+  | Value  | Meaning              |
+  | ------ | -------------------- |
+  | `soft` | Default usable limit |
+  | `hard` | Absolute max limit   |
+  | `-1`   | Unlimited            |
 
 ### Test OpenSearch
 
@@ -201,6 +207,7 @@ iwr -Method DEL -Uri "http://localhost:9200/test-index"
 **Purpose**: Web UI for visualizing and managing OpenSearch data
 
 **Configuration**:
+
 - **Image**: `opensearchproject/opensearch-dashboards:2.19.0`
 - **Port**: `5601:5601`
 - **Connected to**: `opensearch:9200`
@@ -227,6 +234,7 @@ curl http://localhost:5601/api/status
 **Purpose**: Local LLM inference server for running open-source models
 
 **Configuration**:
+
 - **Image**: `ollama/ollama:0.11.2`
 - **Port**: `11434:11434`
 - **Models Storage**: Persisted in `ollama_data` volume
@@ -259,10 +267,12 @@ curl http://localhost:11434/api/tags
 **Purpose**: Generate passage and query embeddings with Jina AI's embeddings API for hybrid search and vector indexing.
 
 **Location**:
+
 - Client implementation: `src/services/embeddings/jina_client.py`
 - Request/response models: `src/schemas/embeddings/models.py`
 
 **Usage**:
+
 ```python
 from src.services.embeddings.jina_client import JinaEmbeddingsClient
 
@@ -274,6 +284,7 @@ async with client:
 ```
 
 **Notes**:
+
 - Uses the `jina-embeddings-v3` model
 - Embeddings are 1024 dimensions and are aligned with the OpenSearch vector index configuration
 - API key is configured in `src.config.Settings.jina_api_key`
@@ -285,17 +296,19 @@ async with client:
 **Purpose**: Orchestrate data pipelines, PDF processing, and arXiv paper fetching
 
 **Configuration**:
+
 - **Build Context**: `./airflow`
 - **Port**: `8081:8080` (mapped to avoid conflict with default 8080)
 - **User**: UID/GID `50000` (configurable via `user` parameter)
 - **Dependencies**: PostgreSQL (for metadata), OpenSearch, API
 
 **Volumes**:
+
 ```yaml
-- ./airflow/dags:/opt/airflow/dags          # DAG definitions
-- airflow_logs:/opt/airflow/logs            # Task logs
-- ./airflow/plugins:/opt/airflow/plugins    # Custom plugins
-- ./src:/opt/airflow/src                    # Shared source code
+- ./airflow/dags:/opt/airflow/dags # DAG definitions
+- airflow_logs:/opt/airflow/logs # Task logs
+- ./airflow/plugins:/opt/airflow/plugins # Custom plugins
+- ./src:/opt/airflow/src # Shared source code
 ```
 
 **Access**: http://localhost:8081
@@ -308,10 +321,12 @@ async with client:
 **Purpose**: Async client for fetching papers from the arXiv API, including category searches, custom queries, paper lookups by ID, and PDF downloads with local caching.
 
 **Location**:
+
 - Client implementation: `src/services/arxiv/client.py`
 - Factory helper: `src/services/arxiv/factory.py`
 
 **Usage**:
+
 ```python
 from src.services.arxiv.factory import make_arxiv_client
 
@@ -320,6 +335,7 @@ papers = await arxiv_client.fetch_papers(max_results=10)
 ```
 
 **Notes**:
+
 - Configuration comes from `src.config.ArxivSettings`
 - Requests are rate-limited to respect the arXiv API
 - PDF files are cached locally in the configured cache directory
@@ -331,11 +347,13 @@ papers = await arxiv_client.fetch_papers(max_results=10)
 **Purpose**: Parse scientific PDFs into structured content (sections + full text) using Docling with validation for file size, PDF format, and page limits.
 
 **Location**:
+
 - Main parser service: `src/services/pdf_parser/parser.py`
 - Docling implementation: `src/services/pdf_parser/docling.py`
 - Factory helper: `src/services/pdf_parser/factory.py`
 
 **Usage**:
+
 ```python
 from pathlib import Path
 
@@ -346,6 +364,7 @@ pdf_content = await pdf_parser.parse_pdf(Path("data/arxiv_pdfs/sample.pdf"))
 ```
 
 **Notes**:
+
 - Configuration comes from `src.config` (`pdf_parser.max_pages`, `pdf_parser.max_file_size_mb`, `pdf_parser.do_ocr`, `pdf_parser.do_table_structure`)
 - Parser metadata is exposed via `parser_used=docling`
 - Intended for PDF content extraction, while paper metadata comes from arXiv API
@@ -452,7 +471,6 @@ docker compose ps
 
 ---
 
-
 ### Viewing Logs
 
 ```bash
@@ -489,14 +507,14 @@ docker compose up -d --build
 
 ### Service URLs
 
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| **Airflow Web UI** | http://localhost:8081 | admin / admin |
-| **API** | http://localhost:8000 | N/A |
-| **OpenSearch** | http://localhost:9200 | N/A |
-| **OpenSearch Dashboards** | http://localhost:5601 | N/A |
-| **Ollama** | http://localhost:11434 | N/A |
-| **PostgreSQL** | `localhost:5432` | rag_user / rag_password |
+| Service                   | URL                    | Credentials             |
+| ------------------------- | ---------------------- | ----------------------- |
+| **Airflow Web UI**        | http://localhost:8081  | admin / admin           |
+| **API**                   | http://localhost:8000  | N/A                     |
+| **OpenSearch**            | http://localhost:9200  | N/A                     |
+| **OpenSearch Dashboards** | http://localhost:5601  | N/A                     |
+| **Ollama**                | http://localhost:11434 | N/A                     |
+| **PostgreSQL**            | `localhost:5432`       | rag_user / rag_password |
 
 ### Database Connection String
 
@@ -505,6 +523,7 @@ postgresql://rag_user:rag_password@localhost:5432/rag_db
 ```
 
 From within containers:
+
 ```
 postgresql://rag_user:rag_password@postgres:5432/rag_db
 ```
@@ -520,6 +539,7 @@ postgresql://rag_user:rag_password@postgres:5432/rag_db
 5. **Scale Up**: Add more workers or services as needed
 
 For more details, see:
+
 - [Airflow Documentation](https://airflow.apache.org/docs/)
 - [Docker Compose Documentation](https://docs.docker.com/compose/)
 - [OpenSearch Documentation](https://opensearch.org/docs/)

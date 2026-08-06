@@ -16,7 +16,11 @@ ARXIV_PAPERS_CHUNKS_MAPPING = {
         "analysis": {
             "analyzer": {
                 "standard_analyzer": {"type": "standard", "stopwords": "_english_"},
-                "text_analyzer": {"type": "custom", "tokenizer": "standard", "filter": ["lowercase", "stop", "snowball"]},
+                "text_analyzer": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "filter": ["lowercase", "stop", "snowball"],
+                },
             }
         },
     },

@@ -1,8 +1,8 @@
+from collections.abc import Generator
 from functools import lru_cache
-from typing import Annotated, Generator
+from typing import Annotated
 
 from fastapi import Depends, Request
-
 from sqlalchemy.orm import Session
 from src.config import Settings
 from src.db.interfaces.base import BaseDataBaseInterface
@@ -21,7 +21,9 @@ def get_database(request: Request) -> BaseDataBaseInterface:
     return request.app.state.database
 
 
-def get_db_session(database: Annotated[BaseDataBaseInterface, Depends(get_database)]) -> Generator[Session, None, None]:
+def get_db_session(
+    database: Annotated[BaseDataBaseInterface, Depends(get_database)],
+) -> Generator[Session, None, None]:
     """Get database session dependency."""
     with database.get_session() as session:
         yield session

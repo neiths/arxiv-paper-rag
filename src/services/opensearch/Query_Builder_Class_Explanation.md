@@ -212,10 +212,10 @@ Boolean queries combine multiple conditions.
 
 There are four common Boolean clauses:
 
-* must
-* should
-* filter
-* must_not
+- must
+- should
+- filter
+- must_not
 
 This implementation currently uses only **must** and **filter**.
 
@@ -260,8 +260,7 @@ the class generates
 instead of
 
 ```json
-{
-}
+{}
 ```
 
 which tells OpenSearch to return every document.
@@ -292,9 +291,9 @@ transformer attention
 
 Searches
 
-* title
-* abstract
-* chunk_text
+- title
+- abstract
+- chunk_text
 
 at the same time.
 
@@ -490,11 +489,9 @@ produces
 
 ```json
 {
-    "terms":{
-        "categories":[
-            "cs.AI"
-        ]
-    }
+  "terms": {
+    "categories": ["cs.AI"]
+  }
 }
 ```
 
@@ -649,8 +646,8 @@ the generated sort is
 ```json
 [
   {
-    "published_date":{
-      "order":"desc"
+    "published_date": {
+      "order": "desc"
     }
   },
   "_score"

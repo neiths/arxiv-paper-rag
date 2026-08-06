@@ -1,5 +1,4 @@
 import logging
-from typing import List
 
 import httpx
 from src.schemas.embeddings.jina import JinaEmbeddingRequest, JinaEmbeddingResponse
@@ -29,7 +28,9 @@ class JinaEmbeddingsClient:
         self.client = httpx.AsyncClient(timeout=30.0)
         logger.info("Jina embeddings client initialized")
 
-    async def embed_passages(self, texts: List[str], batch_size: int = 100) -> List[List[float]]:
+    async def embed_passages(
+        self, texts: list[str], batch_size: int = 100
+    ) -> list[list[float]]:
         """Embed text passages for indexing.
 
         :param texts: List of text passages to embed
@@ -42,12 +43,17 @@ class JinaEmbeddingsClient:
             batch = texts[i : i + batch_size]
 
             request_data = JinaEmbeddingRequest(
-                model="jina-embeddings-v3", task="retrieval.passage", dimensions=1024, input=batch
+                model="jina-embeddings-v3",
+                task="retrieval.passage",
+                dimensions=1024,
+                input=batch,
             )
 
             try:
                 response = await self.client.post(
-                    f"{self.base_url}/embeddings", headers=self.headers, json=request_data.model_dump()
+                    f"{self.base_url}/embeddings",
+                    headers=self.headers,
+                    json=request_data.model_dump(),
                 )
                 response.raise_for_status()
 
@@ -67,16 +73,25 @@ class JinaEmbeddingsClient:
         logger.info(f"Successfully embedded {len(texts)} passages")
         return embeddings
 
-    async def embed_query(self, query: str) -> List[float]:
+    async def embed_query(self, query: str) -> list[float]:
         """Embed a search query.
 
         :param query: Query text to embed
         :returns: Embedding vector for the query
         """
-        request_data = JinaEmbeddingRequest(model="jina-embeddings-v3", task="retrieval.query", dimensions=1024, input=[query])
+        request_data = JinaEmbeddingRequest(
+            model="jina-embeddings-v3",
+            task="retrieval.query",
+            dimensions=1024,
+            input=[query],
+        )
 
         try:
-            response = await self.client.post(f"{self.base_url}/embeddings", headers=self.headers, json=request_data.model_dump())
+            response = await self.client.post(
+                f"{self.base_url}/embeddings",
+                headers=self.headers,
+                json=request_data.model_dump(),
+            )
             response.raise_for_status()
 
             result = JinaEmbeddingResponse(**response.json())

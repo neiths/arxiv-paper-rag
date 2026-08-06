@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +16,8 @@ class QueryBuilder:
         query: str,
         size: int = 10,
         from_: int = 0,
-        fields: Optional[List[str]] = None,
-        categories: Optional[List[str]] = None,
+        fields: list[str] | None = None,
+        categories: list[str] | None = None,
         track_total_hits: bool = True,
         latest_papers: bool = False,
         search_chunks: bool = False,
@@ -49,7 +49,7 @@ class QueryBuilder:
         else:
             self.fields = fields
 
-    def build(self) -> Dict[str, Any]:
+    def build(self) -> dict[str, Any]:
         """Build the complete OpenSearch query.
 
         :returns: Complete query dictionary ready for OpenSearch
@@ -69,7 +69,7 @@ class QueryBuilder:
 
         return query_body
 
-    def _build_query(self) -> Dict[str, Any]:
+    def _build_query(self) -> dict[str, Any]:
         """Build the main query with filters.
 
         :returns: Query dictionary with bool structure
@@ -93,7 +93,7 @@ class QueryBuilder:
 
         return {"bool": bool_query}
 
-    def _build_text_query(self) -> Dict[str, Any]:
+    def _build_text_query(self) -> dict[str, Any]:
         """Build the main text search query.
 
         :returns: Multi-match query for text search
@@ -109,7 +109,7 @@ class QueryBuilder:
             }
         }
 
-    def _build_filters(self) -> List[Dict[str, Any]]:
+    def _build_filters(self) -> list[dict[str, Any]]:
         """Build filter clauses for the query.
 
         :returns: List of filter clauses
@@ -129,9 +129,17 @@ class QueryBuilder:
         if self.search_chunks:
             return {"excludes": ["embedding"]}
         else:
-            return ["arxiv_id", "title", "authors", "abstract", "categories", "published_date", "pdf_url"]
+            return [
+                "arxiv_id",
+                "title",
+                "authors",
+                "abstract",
+                "categories",
+                "published_date",
+                "pdf_url",
+            ]
 
-    def _build_highlight(self) -> Dict[str, Any]:
+    def _build_highlight(self) -> dict[str, Any]:
         """Build highlighting configuration.
 
         :returns: Highlight configuration dictionary
@@ -145,7 +153,12 @@ class QueryBuilder:
                         "pre_tags": ["<mark>"],
                         "post_tags": ["</mark>"],
                     },
-                    "title": {"fragment_size": 0, "number_of_fragments": 0, "pre_tags": ["<mark>"], "post_tags": ["</mark>"]},
+                    "title": {
+                        "fragment_size": 0,
+                        "number_of_fragments": 0,
+                        "pre_tags": ["<mark>"],
+                        "post_tags": ["</mark>"],
+                    },
                     "abstract": {
                         "fragment_size": 150,
                         "number_of_fragments": 1,
@@ -179,7 +192,7 @@ class QueryBuilder:
                 "require_field_match": False,
             }
 
-    def _build_sort(self) -> Optional[List[Dict[str, Any]]]:
+    def _build_sort(self) -> list[dict[str, Any]] | None:
         """Build sorting configuration.
 
         :returns: Sort configuration or None for relevance scoring

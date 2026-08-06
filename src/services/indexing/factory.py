@@ -1,5 +1,3 @@
-from typing import Optional
-
 from src.config import Settings, get_settings
 from src.services.embeddings.factory import make_embeddings_client
 from src.services.opensearch.factory import make_opensearch_client_fresh
@@ -9,7 +7,7 @@ from .text_chunker import TextChunker
 
 
 def make_hybrid_indexing_service(
-    settings: Optional[Settings] = None, opensearch_host: Optional[str] = None
+    settings: Settings | None = None, opensearch_host: str | None = None
 ) -> HybridIndexingService:
     """Factory function to create hybrid indexing service.
 
@@ -32,4 +30,8 @@ def make_hybrid_indexing_service(
     opensearch_client = make_opensearch_client_fresh(settings, host=opensearch_host)
 
     # Create indexing service
-    return HybridIndexingService(chunker=chunker, embeddings_client=embeddings_client, opensearch_client=opensearch_client)
+    return HybridIndexingService(
+        chunker=chunker,
+        embeddings_client=embeddings_client,
+        opensearch_client=opensearch_client,
+    )
