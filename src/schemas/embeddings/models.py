@@ -1,5 +1,3 @@
-from typing import Dict, List
-
 from pydantic import BaseModel
 
 
@@ -11,7 +9,7 @@ class JinaEmbeddingRequest(BaseModel):
     dimensions: int = 1024
     late_chunking: bool = False
     embedding_type: str = "float"
-    input: List[str]
+    input: list[str]
 
 
 class JinaEmbeddingResponse(BaseModel):
@@ -19,5 +17,5 @@ class JinaEmbeddingResponse(BaseModel):
 
     model: str
     object: str = "list"
-    usage: Dict[str, int]
-    data: List[Dict]
+    usage: dict[str, int]
+    data: list[dict]

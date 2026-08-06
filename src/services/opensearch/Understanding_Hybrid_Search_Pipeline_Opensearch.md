@@ -80,8 +80,8 @@ The vector search returns:
 
 Notice that:
 
-* BM25 prefers **Document A** because it contains the exact keywords.
-* Vector search prefers **Document B** because it is semantically similar.
+- BM25 prefers **Document A** because it contains the exact keywords.
+- Vector search prefers **Document B** because it is semantically similar.
 
 Which document should be ranked first?
 
@@ -95,11 +95,10 @@ RRF assigns each document a score using:
 
 $\text{Score} = \frac{1}{k + \text{rank}}$
 
-
 where:
 
-* **rank** = document position (1, 2, 3, ...)
-* **k** = `rank_constant`
+- **rank** = document position (1, 2, 3, ...)
+- **k** = `rank_constant`
 
 In your configuration:
 
@@ -197,9 +196,9 @@ The differences become much smaller.
 
 This means:
 
-* Multiple rankings contribute more fairly.
-* A document that ranks well in both searches is rewarded.
-* One search cannot dominate simply because it ranked a document first.
+- Multiple rankings contribute more fairly.
+- A document that ranks well in both searches is rewarded.
+- One search cannot dominate simply because it ranked a document first.
 
 A value around **60** has been shown in research to work well across many retrieval tasks and is the commonly recommended default.
 
@@ -209,11 +208,11 @@ A value around **60** has been shown in research to work well across many retrie
 
 RRF has several advantages:
 
-* It ignores incompatible score scales between BM25 and vector search.
-* It requires no manual weight tuning.
-* It is robust across different datasets.
-* It is simple to understand and compute.
-* It often performs competitively with more complex ranking methods.
+- It ignores incompatible score scales between BM25 and vector search.
+- It requires no manual weight tuning.
+- It is robust across different datasets.
+- It is simple to understand and compute.
+- It often performs competitively with more complex ranking methods.
 
 Because of these properties, RRF is widely used in Retrieval-Augmented Generation (RAG) systems and search engines.
 
@@ -294,8 +293,8 @@ Unlike an arithmetic average, the harmonic mean penalizes a document that scores
 
 This specifies the relative importance of each search method:
 
-* **30%** BM25
-* **70%** Vector Search
+- **30%** BM25
+- **70%** Vector Search
 
 If semantic similarity is more important than exact keyword matching, assigning a higher weight to vector search can improve results.
 

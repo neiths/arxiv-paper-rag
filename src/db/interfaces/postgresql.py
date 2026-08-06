@@ -1,13 +1,12 @@
 import logging
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Optional, Generator
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
-from sqlalchemy.orm import Session, sessionmaker, declarative_base
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
-from sqlalchemy import create_engine, text, inspect
-
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from src.db.interfaces.base import BaseDataBaseInterface
 
 logger = logging.getLogger(__name__)
@@ -43,8 +42,8 @@ class PostgreSQLDataBase(BaseDataBaseInterface):
 
     def __init__(self, config: PostgreSQLSettings):
         self.config = config
-        self.engine: Optional[Engine] = None
-        self.session_factory: Optional[sessionmaker] = None
+        self.engine: Engine | None = None
+        self.session_factory: sessionmaker | None = None
 
     def startup(self) -> None:
         """Initialize the PostgreSQL database connection."""
@@ -61,15 +60,15 @@ class PostgreSQLDataBase(BaseDataBaseInterface):
                 max_overflow=self.config.max_overflow,
             )
 
-            self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
+            self.session_factory = sessionmaker(
+                bind=self.engine, expire_on_commit=False
+            )
 
             # Test the connection
             assert self.engine is not None
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
-                logger.info(
-                    "Database connection test successful."
-                )
+                logger.info("Database connection test successful.")
 
             # Check which tables exist before creating
             inspector = inspect(self.engine)
@@ -83,17 +82,15 @@ class PostgreSQLDataBase(BaseDataBaseInterface):
             new_tables = set(updated_tables) - set(existing_tables)
 
             if new_tables:
-                logger.info(
-                    f"Created new tables: {', '.join(new_tables)}"
-                )
+                logger.info(f"Created new tables: {', '.join(new_tables)}")
             else:
-                logger.info(
-                    "All tables already exist. No new tables were created."
-                )
+                logger.info("All tables already exist. No new tables were created.")
 
             logger.info("PostgreSQL database initialized successfully.")
             logger.info(f"Database: {self.engine.url.database}")
-            logger.info(f"Total tables: {', '.join(updated_tables) if updated_tables else 'None'}")
+            logger.info(
+                f"Total tables: {', '.join(updated_tables) if updated_tables else 'None'}"
+            )
             logger.info("Database connection established successfully.")
 
         except Exception as e:

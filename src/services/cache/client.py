@@ -2,7 +2,6 @@ import hashlib
 import json
 import logging
 from datetime import timedelta
-from typing import Optional
 
 import redis
 from src.config import RedisSettings
@@ -41,17 +40,19 @@ class CacheClient:
             success = self.redis.set(cache_key, response.model_dump_json(), ex=self.ttl)
 
             if success:
-                logger.info(f"Stored response in exact cache with key {cache_key[:16]}...")
+                logger.info(
+                    f"Stored response in exact cache with key {cache_key[:16]}..."
+                )
                 return True
             else:
-                logger.warning(f"Failed to store response in cache")
+                logger.warning("Failed to store response in cache")
                 return False
 
         except Exception as e:
             logger.error(f"Error storing in cache: {e}")
             return False
 
-    async def find_cached_response(self, request: AskRequest) -> Optional[AskResponse]:
+    async def find_cached_response(self, request: AskRequest) -> AskResponse | None:
         """Find cached response for exact query match."""
         try:
             cache_key = self._generate_cache_key(request)
@@ -62,7 +63,7 @@ class CacheClient:
             if cached_response:
                 try:
                     response_data = json.loads(cached_response)
-                    logger.info(f"Cache hit for exact query match")
+                    logger.info("Cache hit for exact query match")
                     return AskResponse(**response_data)
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to deserialize cached response: {e}")

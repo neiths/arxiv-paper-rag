@@ -1,5 +1,4 @@
 import logging
-from typing import Dict, List, Optional
 
 from src.services.embeddings.jina_client import JinaEmbeddingsClient
 from src.services.opensearch.client import OpenSearchClient
@@ -18,7 +17,12 @@ class HybridIndexingService:
     3. Indexing chunks with embeddings into OpenSearch
     """
 
-    def __init__(self, chunker: TextChunker, embeddings_client: JinaEmbeddingsClient, opensearch_client: OpenSearchClient):
+    def __init__(
+        self,
+        chunker: TextChunker,
+        embeddings_client: JinaEmbeddingsClient,
+        opensearch_client: OpenSearchClient,
+    ):
         """Initialize hybrid indexing service.
 
         :param chunker: Text chunking service
@@ -31,7 +35,7 @@ class HybridIndexingService:
 
         logger.info("Hybrid indexing service initialized")
 
-    async def index_paper(self, paper_data: Dict) -> Dict[str, int]:
+    async def index_paper(self, paper_data: dict) -> dict[str, int]:
         """Index a single paper with chunking and embeddings.
 
         :param paper_data: Paper data from database
@@ -42,7 +46,12 @@ class HybridIndexingService:
 
         if not arxiv_id:
             logger.error("Paper missing arxiv_id")
-            return {"chunks_created": 0, "chunks_indexed": 0, "embeddings_generated": 0, "errors": 1}
+            return {
+                "chunks_created": 0,
+                "chunks_indexed": 0,
+                "embeddings_generated": 0,
+                "errors": 1,
+            }
 
         try:
             # Step 1: Chunk the paper using hybrid section-based approach
@@ -57,7 +66,12 @@ class HybridIndexingService:
 
             if not chunks:
                 logger.warning(f"No chunks created for paper {arxiv_id}")
-                return {"chunks_created": 0, "chunks_indexed": 0, "embeddings_generated": 0, "errors": 0}
+                return {
+                    "chunks_created": 0,
+                    "chunks_indexed": 0,
+                    "embeddings_generated": 0,
+                    "errors": 0,
+                }
 
             logger.info(f"Created {len(chunks)} chunks for paper {arxiv_id}")
 
@@ -69,13 +83,20 @@ class HybridIndexingService:
             )
 
             if len(embeddings) != len(chunks):
-                logger.error(f"Embedding count mismatch: {len(embeddings)} != {len(chunks)}")
-                return {"chunks_created": len(chunks), "chunks_indexed": 0, "embeddings_generated": len(embeddings), "errors": 1}
+                logger.error(
+                    f"Embedding count mismatch: {len(embeddings)} != {len(chunks)}"
+                )
+                return {
+                    "chunks_created": len(chunks),
+                    "chunks_indexed": 0,
+                    "embeddings_generated": len(embeddings),
+                    "errors": 1,
+                }
 
             # Step 3: Prepare chunks with embeddings for indexing
             chunks_with_embeddings = []
 
-            for chunk, embedding in zip(chunks, embeddings):
+            for chunk, embedding in zip(chunks, embeddings, strict=False):
                 # Prepare chunk data for OpenSearch
                 chunk_data = {
                     "arxiv_id": chunk.arxiv_id,
@@ -89,20 +110,26 @@ class HybridIndexingService:
                     "embedding_model": "jina-embeddings-v3",
                     # Denormalized paper metadata for efficient search
                     "title": paper_data.get("title", ""),
-                    "authors": ", ".join(paper_data.get("authors", []))
-                    if isinstance(paper_data.get("authors"), list)
-                    else paper_data.get("authors", ""),
+                    "authors": (
+                        ", ".join(paper_data.get("authors", []))
+                        if isinstance(paper_data.get("authors"), list)
+                        else paper_data.get("authors", "")
+                    ),
                     "abstract": paper_data.get("abstract", ""),
                     "categories": paper_data.get("categories", []),
                     "published_date": paper_data.get("published_date"),
                 }
 
-                chunks_with_embeddings.append({"chunk_data": chunk_data, "embedding": embedding})
+                chunks_with_embeddings.append(
+                    {"chunk_data": chunk_data, "embedding": embedding}
+                )
 
             # Step 4: Index chunks into OpenSearch
             results = self.opensearch_client.bulk_index_chunks(chunks_with_embeddings)
 
-            logger.info(f"Indexed paper {arxiv_id}: {results['success']} chunks successful, {results['failed']} failed")
+            logger.info(
+                f"Indexed paper {arxiv_id}: {results['success']} chunks successful, {results['failed']} failed"
+            )
 
             return {
                 "chunks_created": len(chunks),
@@ -113,9 +140,16 @@ class HybridIndexingService:
 
         except Exception as e:
             logger.error(f"Error indexing paper {arxiv_id}: {e}")
-            return {"chunks_created": 0, "chunks_indexed": 0, "embeddings_generated": 0, "errors": 1}
+            return {
+                "chunks_created": 0,
+                "chunks_indexed": 0,
+                "embeddings_generated": 0,
+                "errors": 1,
+            }
 
-    async def index_papers_batch(self, papers: List[Dict], replace_existing: bool = False) -> Dict[str, int]:
+    async def index_papers_batch(
+        self, papers: list[dict], replace_existing: bool = False
+    ) -> dict[str, int]:
         """Index multiple papers in batch.
 
         :param papers: List of paper data
@@ -154,7 +188,7 @@ class HybridIndexingService:
 
         return total_stats
 
-    async def reindex_paper(self, arxiv_id: str, paper_data: Dict) -> Dict[str, int]:
+    async def reindex_paper(self, arxiv_id: str, paper_data: dict) -> dict[str, int]:
         """Reindex a paper by deleting old chunks and creating new ones.
 
         :param arxiv_id: ArXiv ID of the paper
