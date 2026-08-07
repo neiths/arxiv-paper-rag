@@ -71,19 +71,9 @@ def get_ollama_client(request: Request) -> OllamaClient:
     return request.app.state.ollama_client
 
 
-def get_langfuse_tracer(request: Request) -> LangfuseTracer:
-    """Get Langfuse tracer from the request state."""
-    return request.app.state.langfuse_tracer
-
-
 def get_cache_client(request: Request) -> CacheClient | None:
     """Get cache client from the request state."""
     return getattr(request.app.state, "cache_client", None)
-
-
-def get_telegram_service(request: Request) -> TelegramBot | None:
-    """Get Telegram service from the request state."""
-    return getattr(request.app.state, "telegram_service", None)
 
 
 # Dependency annotations
