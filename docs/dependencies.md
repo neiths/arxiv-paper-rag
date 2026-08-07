@@ -15,13 +15,14 @@ This project centralizes FastAPI dependency providers in src/dependencies.py. De
 - get_settings (cached): returns configured Settings (lru_cache ensures a single global instance).
 - get_request_settings: reads Settings from request.app.state (per-app init).
 - get_database / get_db_session: provide BaseDatabase and a scoped Session using `with database.get_session(): yield session`.
-- get_*_client / get_*_service: return app-level singletons stored on request.app.state (OpenSearchClient, ArxivClient, PDFParserService, JinaEmbeddingsClient, OllamaClient, LangfuseTracer).
+- get___client / get___service: return app-level singletons stored on request.app.state (OpenSearchClient, ArxivClient, PDFParserService, JinaEmbeddingsClient, OllamaClient, LangfuseTracer).
 - get_cache_client / get_telegram_service: optional getters using getattr(..., None).
 - Predefined Annotated aliases (SettingsDep, SessionDep, OpenSearchDep, etc.) for concise route signatures.
 
 ## How to use in routes
 
 Example signature using the annotated deps:
+
 ```python
 # filepath: /home/thienhb/Workspace/arxiv-paper-rag/src/api/search.py
 from fastapi import APIRouter
@@ -40,6 +41,7 @@ def search(
 ```
 
 Or explicit Depends:
+
 ```python
 from fastapi import Depends
 def search(db = Depends(get_db_session)):
