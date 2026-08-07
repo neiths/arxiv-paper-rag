@@ -33,14 +33,14 @@ def get_cached_services() -> tuple[Any, Any, Any, Any, Any]:
     # Initialize Arxiv client
     arxiv_client = make_arxiv_client()
 
-    # Initialize metadata fetcher
-    metadata_fetcher = make_metadata_fetcher()
-
     # Initialize OpenSearch client
     opensearch_client = make_opensearch_client()
 
     # Initialize PDF parser service
     pdf_parser_service = make_pdf_parser_service()
+
+    # Create metadata fetcher with dependencies
+    metadata_fetcher = make_metadata_fetcher(arxiv_client, pdf_parser_service)
 
     logger.info("Services and clients initialized successfully.")
 

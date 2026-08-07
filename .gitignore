@@ -1,5 +1,8 @@
 # my file
 scripts/
+package-lock.json
+package.json
+node_modules
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

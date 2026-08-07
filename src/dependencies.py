@@ -13,7 +13,7 @@ else:
         pass
 
 from src.config import Settings
-from src.db.interfaces.base import BaseDatabase
+from src.db.interfaces.base import BaseDataBaseInterface
 from src.services.arxiv.client import ArxivClient
 from src.services.cache.client import CacheClient
 from src.services.embeddings.jina_client import JinaEmbeddingsClient
@@ -33,13 +33,13 @@ def get_request_settings(request: Request) -> Settings:
     return request.app.state.settings
 
 
-def get_database(request: Request) -> BaseDatabase:
+def get_database(request: Request) -> BaseDataBaseInterface:
     """Get database from the request state."""
     return request.app.state.database
 
 
 def get_db_session(
-    database: Annotated[BaseDatabase, Depends(get_database)],
+    database: Annotated[BaseDataBaseInterface, Depends(get_database)],
 ) -> Generator[Session, None, None]:
     """Get database session dependency."""
     with database.get_session() as session:
@@ -71,24 +71,14 @@ def get_ollama_client(request: Request) -> OllamaClient:
     return request.app.state.ollama_client
 
 
-def get_langfuse_tracer(request: Request) -> LangfuseTracer:
-    """Get Langfuse tracer from the request state."""
-    return request.app.state.langfuse_tracer
-
-
 def get_cache_client(request: Request) -> CacheClient | None:
     """Get cache client from the request state."""
     return getattr(request.app.state, "cache_client", None)
 
 
-def get_telegram_service(request: Request) -> TelegramBot | None:
-    """Get Telegram service from the request state."""
-    return getattr(request.app.state, "telegram_service", None)
-
-
 # Dependency annotations
 SettingsDep = Annotated[Settings, Depends(get_settings)]
-DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
+DatabaseDep = Annotated[BaseDataBaseInterface, Depends(get_database)]
 SessionDep = Annotated[Session, Depends(get_db_session)]
 OpenSearchDep = Annotated[OpenSearchClient, Depends(get_opensearch_client)]
 ArxivDep = Annotated[ArxivClient, Depends(get_arxiv_client)]
