@@ -1,7 +1,7 @@
 import logging
 
 import httpx
-from src.schemas.embeddings.jina import JinaEmbeddingRequest, JinaEmbeddingResponse
+from src.schemas.embeddings.models import JinaEmbeddingRequest, JinaEmbeddingResponse
 
 logger = logging.getLogger(__name__)
 

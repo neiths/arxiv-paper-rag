@@ -154,7 +154,6 @@ async def ask_question_stream(
     opensearch_client: OpenSearchDep,
     embeddings_service: EmbeddingsDep,
     ollama_client: OllamaDep,
-    langfuse_tracer: LangfuseDep,
     cache_client: CacheDep,
 ) -> StreamingResponse:
     """Clean streaming RAG endpoint."""
