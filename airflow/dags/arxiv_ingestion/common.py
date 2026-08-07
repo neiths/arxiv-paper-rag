@@ -42,6 +42,9 @@ def get_cached_services() -> tuple[Any, Any, Any, Any, Any]:
     # Initialize PDF parser service
     pdf_parser_service = make_pdf_parser_service()
 
+    # Create metadata fetcher with dependencies
+    metadata_fetcher = make_metadata_fetcher(arxiv_client, pdf_parser_service)
+
     logger.info("Services and clients initialized successfully.")
 
     return (arxiv_client, pdf_parser_service, db, metadata_fetcher, opensearch_client)
