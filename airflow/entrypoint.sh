@@ -1,5 +1,4 @@
 #!/bin/bash
-
 set -e
 
 # 1. Clean up stale PID files left over from previous crashes
