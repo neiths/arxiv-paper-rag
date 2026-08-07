@@ -1,8 +1,8 @@
 from fastapi import APIRouter
-
 from src.schemas.ask import AskRequest, AskResponse, PaperSource
 
 router = APIRouter()
+
 
 @router.post("/ask", response_model=AskResponse)
 async def ask_question(request: AskRequest) -> AskResponse:
@@ -23,7 +23,7 @@ async def ask_question(request: AskRequest) -> AskResponse:
             arxiv_id="1234.56789",
             title="Sample Paper Title",
             authors=["Author One", "Author Two"],
-            abstract_preview="This is a preview of the abstract of the sample paper."
+            abstract_preview="This is a preview of the abstract of the sample paper.",
         )
     ]
 

@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pydantic import BaseModel
 
 
@@ -12,7 +10,7 @@ class ChunkMetadata(BaseModel):
     word_count: int
     overlap_with_previous: int
     overlap_with_next: int
-    section_title: Optional[str] = None
+    section_title: str | None = None
 
 
 class TextChunk(BaseModel):

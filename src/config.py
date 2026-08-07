@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -93,7 +93,9 @@ class OpenSearchSettings(BaseConfigSettings):
 
     host: str = "http://localhost:9200"
     index_name: str = "arxiv-papers"
-    chunk_index_suffix: str = "chunks"  # Creates single hybrid index: {index_name}-{suffix}
+    chunk_index_suffix: str = (
+        "chunks"  # Creates single hybrid index: {index_name}-{suffix}
+    )
     max_text_size: int = 1000000
 
     # Vector search settings
@@ -165,7 +167,9 @@ class Settings(BaseConfigSettings):
     environment: Literal["development", "staging", "production"] = "development"
     service_name: str = "rag-api"
 
-    postgres_database_url: str = "postgresql://rag_user:rag_password@localhost:5432/rag_db"
+    postgres_database_url: str = (
+        "postgresql://rag_user:rag_password@localhost:5432/rag_db"
+    )
     postgres_echo_sql: bool = False
     postgres_pool_size: int = 20
     postgres_max_overflow: int = 0
@@ -188,8 +192,10 @@ class Settings(BaseConfigSettings):
     @field_validator("postgres_database_url")
     @classmethod
     def validate_database_url(cls, v: str) -> str:
-        if not (v.startswith("postgresql://") or v.startswith("postgresql+psycopg2://")):
-            raise ValueError("Database URL must start with 'postgresql://' or 'postgresql+psycopg2://'")
+        if not v.startswith(("postgresql://", "postgresql+psycopg2://")):
+            raise ValueError(
+                "Database URL must start with 'postgresql://' or 'postgresql+psycopg2://'"
+            )
         return v
 
 
