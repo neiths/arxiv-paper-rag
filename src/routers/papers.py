@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Path
 from src.dependencies import DBSessionDep
-from src.schemas.paper import PaperResponse
+from src.schemas.arxiv.paper import PaperResponse
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
