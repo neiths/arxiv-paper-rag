@@ -14,7 +14,7 @@ from airflow.operators.python import PythonOperator
 
 def hello_world():
     """Simple hello world function."""
-    print("Hello from Airflow! Week 1 is working.")
+    print("Hello from Airflow! Airflow is working right now.")
     return "success"
 
 
@@ -55,12 +55,12 @@ default_args = {
 
 # Create the DAG
 dag = DAG(
-    "hello_world_week1",
+    "hello_world_airflow",
     default_args=default_args,
-    description="Hello World DAG for Week 1",
+    description="Hello World DAG for Airflow testing",
     schedule=None,  # Manual trigger only (schedule parameter introduced in Airflow 2.4+)
     catchup=False,
-    tags=["week1", "testing"],
+    tags=["airflow", "testing"],
 )
 
 # Define tasks
