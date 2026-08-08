@@ -3,7 +3,7 @@ from sqlalchemy import text
 
 from ..dependencies import DatabaseDep, OpenSearchDep, SettingsDep
 from ..schemas.api.health import HealthResponse, ServiceStatus
-from ..services.ollama import OllamaClient
+from ..services.ollama.client import OllamaClient
 
 router = APIRouter()
 
