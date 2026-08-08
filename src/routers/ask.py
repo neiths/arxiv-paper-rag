@@ -11,8 +11,9 @@ from src.dependencies import (
     EmbeddingsDep,
     OllamaDep,
     OpenSearchDep,
+    SettingsDep,
 )
-from src.schemas.ask import (
+from src.schemas.api.ask import (
     AskRequest,
     AskResponse,
 )
@@ -31,7 +32,6 @@ async def _prepare_chunks_and_sources(
 ) -> tuple[list[dict], list[str], list[str]]:
     """Retrieve and prepare chunks for RAG with clean tracing."""
 
-    # Handle embeddings for hybrid search
     query_embedding = None
     if request.use_hybrid:
         try:
@@ -40,26 +40,32 @@ async def _prepare_chunks_and_sources(
         except Exception as e:
             logger.warning(f"Failed to generate embeddings, falling back to BM25: {e}")
 
-        # Extract essential data for LLM
-        chunks = []
-        arxiv_ids = []
-        sources_set = set()
+    search_results = opensearch_client.search_unified(
+        query=request.query,
+        query_embedding=query_embedding,
+        size=request.top_k,
+        categories=request.categories,
+        use_hybrid=request.use_hybrid,
+    )
 
-        for hit in search_results.get("hits", []):
-            arxiv_id = hit.get("arxiv_id", "")
+    chunks = []
+    arxiv_ids = []
+    sources_set = set()
 
-            # Minimal chunk data for LLM
-            chunks.append(
-                {
-                    "arxiv_id": arxiv_id,
-                    "chunk_text": hit.get("chunk_text", hit.get("abstract", "")),
-                }
-            )
+    for hit in search_results.get("hits", []):
+        arxiv_id = hit.get("arxiv_id", "")
 
-            if arxiv_id:
-                arxiv_ids.append(arxiv_id)
-                arxiv_id_clean = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
-                sources_set.add(f"https://arxiv.org/pdf/{arxiv_id_clean}.pdf")
+        chunks.append(
+            {
+                "arxiv_id": arxiv_id,
+                "chunk_text": hit.get("chunk_text", hit.get("abstract", "")),
+            }
+        )
+
+        if arxiv_id:
+            arxiv_ids.append(arxiv_id)
+            arxiv_id_clean = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
+            sources_set.add(f"https://arxiv.org/pdf/{arxiv_id_clean}.pdf")
 
     return chunks, list(sources_set), arxiv_ids
 
@@ -67,6 +73,7 @@ async def _prepare_chunks_and_sources(
 @ask_router.post("/ask", response_model=AskResponse)
 async def ask_question(
     request: AskRequest,
+    settings: SettingsDep,
     opensearch_client: OpenSearchDep,
     embeddings_service: EmbeddingsDep,
     ollama_client: OllamaDep,
@@ -75,6 +82,15 @@ async def ask_question(
     """Clean RAG endpoint with essential tracing and exact match caching."""
 
     start_time = time.time()
+    effective_model = settings.ollama_model
+
+    if request.model != effective_model:
+        logger.warning(
+            "Requested model '%s' is not the configured Ollama model; using '%s' instead",
+            request.model,
+            effective_model,
+        )
+        request = request.model_copy(update={"model": effective_model})
 
     try:
         # Check exact cache first
@@ -151,12 +167,23 @@ async def ask_question(
 @stream_router.post("/stream")
 async def ask_question_stream(
     request: AskRequest,
+    settings: SettingsDep,
     opensearch_client: OpenSearchDep,
     embeddings_service: EmbeddingsDep,
     ollama_client: OllamaDep,
     cache_client: CacheDep,
 ) -> StreamingResponse:
     """Clean streaming RAG endpoint."""
+
+    effective_model = settings.ollama_model
+
+    if request.model != effective_model:
+        logger.warning(
+            "Requested streaming model '%s' is not the configured Ollama model; using '%s' instead",
+            request.model,
+            effective_model,
+        )
+        request = request.model_copy(update={"model": effective_model})
 
     async def generate_stream():
         start_time = time.time()
