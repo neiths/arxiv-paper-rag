@@ -66,38 +66,13 @@ async def lifespan(app: FastAPI):
     app.state.pdf_parser = make_pdf_parser_service()
     app.state.embeddings_service = make_embeddings_service()
     app.state.ollama_client = make_ollama_client()
-    app.state.langfuse_tracer = make_langfuse_tracer()
     app.state.cache_client = make_cache_client(settings)
     logger.info(
         "Services initialized: arXiv API client, PDF parser, OpenSearch, Embeddings, Ollama, Langfuse, Cache"
     )
 
-    # Initialize Telegram bot (Week 7)
-    telegram_service = make_telegram_service(
-        opensearch_client=app.state.opensearch_client,
-        embeddings_client=app.state.embeddings_service,
-        ollama_client=app.state.ollama_client,
-        cache_client=app.state.cache_client,
-        langfuse_tracer=app.state.langfuse_tracer,
-    )
-
-    if telegram_service:
-        app.state.telegram_service = telegram_service
-        try:
-            await telegram_service.start()
-            logger.info("Telegram bot started successfully")
-        except Exception as e:
-            logger.error(f"Failed to start Telegram bot: {e}")
-    else:
-        logger.info("Telegram bot not configured - skipping initialization")
-
     logger.info("API ready")
     yield
-
-    # Cleanup
-    if hasattr(app.state, "telegram_service") and app.state.telegram_service:
-        await app.state.telegram_service.stop()
-        logger.info("Telegram bot stopped")
 
     database.teardown()
     logger.info("API shutdown complete")
