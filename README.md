@@ -1,545 +1,260 @@
-# arxiv-paper-rag
+# arXiv Paper Curator
 
-# Docker Compose & Airflow Setup Guide
+A full-stack retrieval-augmented generation (RAG) system for arXiv papers. The project ingests papers, extracts PDF content, indexes chunks in OpenSearch, and answers questions with an Ollama-backed LLM.
 
-## 📋 Table of Contents
+## What This Project Does
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Services Explained](#services-explained)
-- [Running the Stack](#running-the-stack)
-- [Testing Individual Components](#testing-individual-components)
-- [Airflow Deep Dive](#airflow-deep-dive)
-- [Troubleshooting](#troubleshooting)
-
----
-
-## Overview
-
-This project uses **Docker Compose** to orchestrate a complete RAG (Retrieval-Augmented Generation) system with Apache Airflow for workflow orchestration. The stack includes:
-
-- **API Service**: FastAPI backend for the RAG application
-- **PostgreSQL**: Relational database for structured data and Airflow metadata
-- **OpenSearch**: Vector search engine for document embeddings
-- **OpenSearch Dashboards**: UI for OpenSearch visualization
-- **Ollama**: Local LLM inference server
-- **Jina Embeddings Client**: Async client for generating 1024-dimension embeddings
-- **ArXiv Client**: Async client for fetching papers from the arXiv API
-- **Docling PDF Parser**: PDF content extraction service for scientific papers
-- **Apache Airflow**: Workflow orchestration for data pipelines
-
----
+- Fetches arXiv papers and caches PDFs locally
+- Parses scientific PDFs with Docling
+- Chunks and indexes paper content in OpenSearch
+- Supports BM25, vector, and hybrid search
+- Answers questions through a FastAPI RAG API
+- Streams answers through an SSE endpoint
+- Caches exact question/answer pairs in Redis
+- Provides a Gradio UI for interactive querying
+- Orchestrates ingestion and helper workflows with Airflow
+- Includes notebook-based Ollama testing and API experiments
 
 ## Architecture
 
-### Network Configuration
-
-All services run on a **bridge network** called `rag-network`, enabling inter-service communication using container names as hostnames.
-
-### Data Persistence
-
-The following Docker volumes ensure data persists across container restarts:
-
-| Volume            | Purpose                     |
-| ----------------- | --------------------------- |
-| `postgres_data`   | PostgreSQL database files   |
-| `opensearch_data` | OpenSearch indices and data |
-| `ollama_data`     | Downloaded LLM models       |
-| `airflow_logs`    | Airflow task execution logs |
-
----
-
-## Services Explained
-
-### 1. **API Service** (`rag-api`)
-
-**Purpose**: Main FastAPI application providing RAG functionality
-
-**Configuration**:
-
-- **Port**: `8000:8000`
-- **Build Context**: Root directory (`.`)
-- **Dependencies**: Waits for PostgreSQL and OpenSearch to be healthy
-- **Health Check**: HTTP GET to `/api/v1/health`
-
-**Environment Variables**:
-
-```bash
-OPENSEARCH_HOST=http://opensearch:9200
-OLLAMA_HOST=http://ollama:11434
-POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db
+```mermaid
+flowchart LR
+  U[User] --> G[Gradio UI]
+  U --> A[FastAPI API]
+  G --> A
+  A --> R[Redis Cache]
+  A --> O[OpenSearch Hybrid Index]
+  A --> L[Ollama]
+  A --> J[Jina Embeddings API]
+  O --> P[PostgreSQL]
+  A --> P
+  AF[Airflow DAGs] --> X[arXiv API]
+  AF --> D[PDF Parser / Docling]
+  AF --> O
+  X --> C[Local PDF Cache]
+  D --> O
 ```
 
-### Test API Service
+## Key Features
+
+### RAG API
+
+- `POST /api/v1/ask` for standard question answering
+- `POST /api/v1/stream` for streaming answers
+- `POST /api/v1/hybrid-search/` for direct search over indexed chunks
+- `GET /api/v1/health` for service health checks
+
+### Search
+
+- BM25 search for keyword matching
+- Vector search using Jina embeddings
+- Native hybrid search with OpenSearch RRF pipeline
+- Category filters for arXiv tags such as `cs.AI` and `cs.LG`
+- Exact-match cache keys include query, model, top_k, hybrid mode, and categories
+
+### LLM and UI
+
+- Ollama generation for answer synthesis
+- Gradio chat UI for interactive testing
+- Streamed responses with source metadata
+- Notebook helper for testing Ollama directly
+
+### Ingestion and Workflow
+
+- ArXiv API client for metadata and paper discovery
+- Local PDF caching
+- Docling-based PDF parsing
+- Airflow DAGs for ingestion and workflow automation
+
+## Tech Stack
+
+- FastAPI
+- PostgreSQL
+- Redis
+- OpenSearch
+- Ollama
+- Jina AI embeddings
+- Docling
+- Airflow
+- Gradio
+
+## Repository Layout
+
+```text
+src/
+  main.py                 FastAPI app entry point
+  routers/                API routes for ask, hybrid search, health
+  services/               OpenSearch, Ollama, embeddings, cache, arXiv, PDF parsing
+  schemas/                Request and response models
+  db/                     Database abstractions and factories
+airflow/
+  dags/                   Airflow workflows and helper modules
+notebooks/
+  ollama_api_testing.ipynb Notebook for local Ollama validation
+  arxiv_api_testing.ipynb  Notebook for arXiv API experiments
+  docling_testing.ipynb    Notebook for PDF parsing checks
+```
+
+## Prerequisites
+
+- Docker Desktop or Docker Engine
+- Docker Compose v2+
+- Python 3.12 if you want to run the app locally outside Docker
+- A Jina API key for hybrid search
+- At least one Ollama model pulled locally
+
+## Configuration
+
+Copy `.env.example` to `.env` and adjust the values for your machine.
+
+Important settings:
+
+- `OLLAMA_HOST=http://localhost:11434`
+- `OLLAMA_MODEL=llama3.2:latest`
+- `OPENSEARCH_HOST=http://localhost:9200`
+- `POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@localhost:5432/rag_db`
+- `JINA_API_KEY=...`
+
+Notes:
+
+- The Ollama model name must match the exact tag shown by `docker exec rag-ollama ollama list`.
+- The Airflow container expects `PYTHONPATH=/opt/airflow` so DAG helpers can import `src.*`.
+- The API and Gradio UI default to `llama3.2:latest`.
+
+## Run The Full Stack
 
 ```bash
-# 1. Start dependencies first
-docker compose up -d postgres opensearch ollama
+docker compose up -d
+docker compose ps
+docker compose logs -f
+```
 
-# 2. Start API service
-docker compose up -d api
+### Main Services
 
-# 3. Check health endpoint
+- API: http://localhost:8000
+- Airflow: http://localhost:8081
+- OpenSearch: http://localhost:9200
+- OpenSearch Dashboards: http://localhost:5601
+- Ollama: http://localhost:11434
+- Adminer: http://localhost:8082
+
+### Useful Commands
+
+```bash
+# Stop services but keep volumes
+docker compose down
+
+# Remove volumes and reset data
+docker compose down -v
+
+# Rebuild one service
+docker compose build api
+
+# Start only the core runtime services
+docker compose up -d postgres opensearch redis ollama
+```
+
+## Run Locally Without Docker
+
+```bash
+uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 1
+```
+
+For the Gradio UI:
+
+```bash
+python src/gradio_app.py
+```
+
+## API Endpoints
+
+### Health
+
+```bash
 curl http://localhost:8000/api/v1/health
-
-# 4. View API logs
-docker compose logs -f api
 ```
 
----
+Returns database, OpenSearch, and Ollama status.
 
-### 2. **PostgreSQL** (`rag-postgres`)
-
-**Purpose**: Primary database for application data and Airflow metadata
-
-**Configuration**:
-
-- **Image**: `postgres:16-alpine`
-- **Port**: `5432:5432`
-- **Database**: `rag_db`
-- **User**: `rag_user`
-- **Password**: `rag_password`
-
-**Health Check**: `pg_isready` command checks database availability
-
-### Test PostgreSQL
+### Ask
 
 ```bash
-# 1. Start only PostgreSQL
-docker compose up -d postgres
-
-# 2. Connect to database
-docker exec -it rag-postgres psql -U rag_user -d rag_db
-
-# 3. Run a test query
-SELECT version();
-
-# list all databases
-\l
-
-# check connect to a specific database
-\c rag_db
-
-# check extensions
-\dx
-
-# create vector extension
-CREATE EXTENSION IF NOT EXISTS vector;
-
-# check extensions again
-\dx vector
-
-# 4. Exit
-\q
+curl -X POST http://localhost:8000/api/v1/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are transformers in machine learning?",
+    "top_k": 3,
+    "use_hybrid": true,
+    "model": "llama3.2:latest",
+    "categories": ["cs.AI", "cs.LG"]
+  }'
 ```
 
----
-
-### 3. **OpenSearch** (`rag-opensearch`)
-
-**Purpose**: Vector search engine for document embeddings and semantic search
-
-**Configuration**:
-
-- **Image**: `opensearchproject/opensearch:2.19.0`
-- **Ports**: `9200` REST API (search, index, vector queries), `9600` performance metrics
-- **Mode**: Single-node cluster
-- **Security**: Disabled for development (`DISABLE_SECURITY_PLUGIN=true`)
-
-**Memory Settings**:
-
-- Java heap: 512MB min/max (`-Xms512m -Xmx512m`)
-- Memory lock: Unlimited (prevents swapping)
-
-rule of thumb:
-
-- Heap size should be set to 50% of available RAM, but not exceed 32GB.
-
-**discovery.type**: Set to `single-node` for standalone operation
-
-**disable_security_plugin**: Set to `true` to disable security features for local development
-
-**bootstrap.memory_lock**: Set to `true` to prevent memory swapping, improving performance
-
-- OpenSearch runs on java (JVM) that java stores its data in RAM (heap memory).
-- If the OS starts swapping memory to disk, it can severely degrade performance.
-- **Memory locking** is dangerous if abused, so a process could lock all RAM. that limit is controlled by ulimit settings.
-
-**ulimit settings**: Configured to allow unlimited memory locking and increase file descriptors for better performance
-
-- `ulimit` = how much the OS allows a process to use or lock
-
-  | Value  | Meaning              |
-  | ------ | -------------------- |
-  | `soft` | Default usable limit |
-  | `hard` | Absolute max limit   |
-  | `-1`   | Unlimited            |
-
-### Test OpenSearch
+### Streaming Ask
 
 ```bash
-# 1. Start OpenSearch
-docker compose up -d opensearch
-
-# 2. Check cluster health
-curl http://localhost:9200/_cluster/health?pretty
-
-# 3. List indices
-curl http://localhost:9200/_cat/indices?v
-
-# 4. Create a test index
-curl -X PUT http://localhost:9200/test-index
-
-# PowerShell
-iwr -Method PUT -Uri "http://localhost:9200/test-index"
-
-# 5. Delete test index
-curl -X DELETE http://localhost:9200/test-index
-
-# PowerShell
-iwr -Method DEL -Uri "http://localhost:9200/test-index"
+curl -N -X POST http://localhost:8000/api/v1/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are transformers in machine learning?",
+    "top_k": 3,
+    "use_hybrid": true,
+    "model": "llama3.2:latest",
+    "categories": ["cs.AI", "cs.LG"]
+  }'
 ```
 
----
-
-### 4. **OpenSearch Dashboards** (`rag-dashboards`)
-
-**Purpose**: Web UI for visualizing and managing OpenSearch data
-
-**Configuration**:
-
-- **Image**: `opensearchproject/opensearch-dashboards:2.19.0`
-- **Port**: `5601:5601`
-- **Connected to**: `opensearch:9200`
-
-**Access**: http://localhost:5601
-
-### Test OpenSearch Dashboards
+### Hybrid Search
 
 ```bash
-# 1. Start OpenSearch and Dashboards
-docker compose up -d opensearch opensearch-dashboards
-
-# 2. Access UI
-# Open browser to: http://localhost:5601
-
-# 3. Check status via API
-curl http://localhost:5601/api/status
+curl -X POST http://localhost:8000/api/v1/hybrid-search/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "machine learning neural networks",
+    "size": 10,
+    "use_hybrid": true,
+    "categories": ["cs.AI", "cs.LG"]
+  }'
 ```
 
----
+## Ollama Model Check
 
-### 5. **Ollama** (`rag-ollama`)
-
-**Purpose**: Local LLM inference server for running open-source models
-
-**Configuration**:
-
-- **Image**: `ollama/ollama:0.11.2`
-- **Port**: `11434:11434`
-- **Models Storage**: Persisted in `ollama_data` volume
-
-**Health Check**: `ollama list` command
-
-### Test Ollama
+If you want to confirm which models are installed:
 
 ```bash
-# 1. Start Ollama
-docker compose up -d ollama
-
-# 2. List available models
-docker exec -it rag-ollama ollama list
-
-# 3. Pull a model (example: smollm2) - small model for testing
-docker exec -it rag-ollama ollama pull smollm2:135m
-
-# 4. Test inference
-docker exec -it rag-ollama ollama run smollm2:135m "Hello, how are you?"
-
-# 5. Check API
 curl http://localhost:11434/api/tags
 ```
 
----
+If the model list shows only `llama3.2:latest`, that is the tag the app should use.
 
-### 6. **Jina Embeddings Client** (`JinaEmbeddingsClient`)
+## Notebooks
 
-**Purpose**: Generate passage and query embeddings with Jina AI's embeddings API for hybrid search and vector indexing.
+The notebook [notebooks/ollama_api_testing.ipynb](notebooks/ollama_api_testing.ipynb) demonstrates how to test Ollama directly from Python.
 
-**Location**:
+Other notebooks cover arXiv API calls, chunking, Docling parsing, and storage connection checks.
 
-- Client implementation: `src/services/embeddings/jina_client.py`
-- Request/response models: `src/schemas/embeddings/models.py`
+## Airflow
 
-**Usage**:
+Airflow is used for ingestion and workflow automation.
 
-```python
-from src.services.embeddings.jina_client import JinaEmbeddingsClient
+- DAGs live in `airflow/dags/`
+- Helper modules live in `airflow/dags/arxiv_ingestion/`
+- Custom plugins live in `airflow/plugins/`
+- Shared app code is mounted into the Airflow container at `/opt/airflow/src`
 
-client = JinaEmbeddingsClient(api_key=settings.jina_api_key)
+Example DAGs included in the repo:
 
-async with client:
-    passage_embeddings = await client.embed_passages(["First paper chunk", "Second paper chunk"])
-    query_embedding = await client.embed_query("retrieval augmented generation")
-```
+- `hello_world_dag.py`
+- `arxiv_paper_ingestion.py`
 
-**Notes**:
+## Troubleshooting
 
-- Uses the `jina-embeddings-v3` model
-- Embeddings are 1024 dimensions and are aligned with the OpenSearch vector index configuration
-- API key is configured in `src.config.Settings.jina_api_key`
+- If the API returns a 404 from Ollama, check `OLLAMA_MODEL` and the exact tag in `ollama list`.
+- If the API cannot connect to OpenSearch, confirm `docker compose ps` shows the cluster healthy.
+- If Airflow imports fail, verify the container is using `PYTHONPATH=/opt/airflow`.
+- If hybrid search is degraded, confirm the Jina API key is present and valid.
+- If cached answers look stale, clear the Redis volume or restart the cache service.
 
----
+## License
 
-### 7. **Apache Airflow** (`rag-airflow`)
-
-**Purpose**: Orchestrate data pipelines, PDF processing, and arXiv paper fetching
-
-**Configuration**:
-
-- **Build Context**: `./airflow`
-- **Port**: `8081:8080` (mapped to avoid conflict with default 8080)
-- **User**: UID/GID `50000` (configurable via `user` parameter)
-- **Dependencies**: PostgreSQL (for metadata), OpenSearch, API
-
-**Volumes**:
-
-```yaml
-- ./airflow/dags:/opt/airflow/dags # DAG definitions
-- airflow_logs:/opt/airflow/logs # Task logs
-- ./airflow/plugins:/opt/airflow/plugins # Custom plugins
-- ./src:/opt/airflow/src # Shared source code
-```
-
-**Access**: http://localhost:8081
-**Credentials**: `admin` / `admin` (set in `entrypoint.sh`)
-
----
-
-### 8. **ArXiv Client** (`ArxivClient`)
-
-**Purpose**: Async client for fetching papers from the arXiv API, including category searches, custom queries, paper lookups by ID, and PDF downloads with local caching.
-
-**Location**:
-
-- Client implementation: `src/services/arxiv/client.py`
-- Factory helper: `src/services/arxiv/factory.py`
-
-**Usage**:
-
-```python
-from src.services.arxiv.factory import make_arxiv_client
-
-arxiv_client = make_arxiv_client()
-papers = await arxiv_client.fetch_papers(max_results=10)
-```
-
-**Notes**:
-
-- Configuration comes from `src.config.ArxivSettings`
-- Requests are rate-limited to respect the arXiv API
-- PDF files are cached locally in the configured cache directory
-
----
-
-### 9. **Docling PDF Parser** (`PDFParserService`)
-
-**Purpose**: Parse scientific PDFs into structured content (sections + full text) using Docling with validation for file size, PDF format, and page limits.
-
-**Location**:
-
-- Main parser service: `src/services/pdf_parser/parser.py`
-- Docling implementation: `src/services/pdf_parser/docling.py`
-- Factory helper: `src/services/pdf_parser/factory.py`
-
-**Usage**:
-
-```python
-from pathlib import Path
-
-from src.services.pdf_parser.factory import make_pdf_parser_service
-
-pdf_parser = make_pdf_parser_service()
-pdf_content = await pdf_parser.parse_pdf(Path("data/arxiv_pdfs/sample.pdf"))
-```
-
-**Notes**:
-
-- Configuration comes from `src.config` (`pdf_parser.max_pages`, `pdf_parser.max_file_size_mb`, `pdf_parser.do_ocr`, `pdf_parser.do_table_structure`)
-- Parser metadata is exposed via `parser_used=docling`
-- Intended for PDF content extraction, while paper metadata comes from arXiv API
-
-### Test Airflow
-
-```bash
-# 1. Start dependencies
-docker compose up -d postgres opensearch
-
-# 2. Start Airflow
-docker compose up -d airflow
-
-# 3. Watch initialization logs
-docker compose logs -f airflow
-
-# 4. Access web UI
-# Open browser to: http://localhost:8081
-# Login: admin / admin
-
-# 5. Test CLI access
-docker exec -it rag-airflow airflow version
-
-# 6. List DAGs
-docker exec -it rag-airflow airflow dags list
-
-# 7. Trigger test DAG
-docker exec -it rag-airflow airflow dags trigger hello_world_week1
-```
-
----
-
-## Running the Stack
-
-### Prerequisites
-
-- Docker Desktop or Docker Engine installed
-- Docker Compose v2+
-- At least 4GB RAM available for containers
-
-### Full Stack Startup
-
-```bash
-# 1. Start all services
-docker compose up -d
-
-# 2. Check service status
-docker compose ps
-
-# 3. View logs for all services
-docker compose logs -f
-
-# 4. View logs for a specific service
-docker compose logs -f airflow
-```
-
-### Service Startup Order
-
-Docker Compose automatically handles dependencies with health checks:
-
-1. **PostgreSQL** starts first (required by API and Airflow)
-2. **OpenSearch** starts in parallel
-3. **Ollama** starts independently
-4. **OpenSearch Dashboards** waits for OpenSearch
-5. **API** waits for PostgreSQL and OpenSearch
-6. **Airflow** waits for PostgreSQL, OpenSearch, and optionally API
-
-### Shutdown
-
-```bash
-# Stop all services (keeps data)
-docker compose down
-
-# Stop and remove volumes (deletes all data)
-docker compose down -v
-```
-
-## Quick Reference
-
-### Common Commands
-
-```bash
-# Start all services
-docker compose up -d
-
-# Stop all services
-docker compose down
-
-# Rebuild specific service
-docker compose build airflow
-
-# Restart service
-docker compose restart airflow
-
-# View logs
-docker compose logs -f airflow
-
-# Execute command in container
-docker exec -it rag-airflow bash
-
-# Check service health
-docker compose ps
-```
-
----
-
-### Viewing Logs
-
-```bash
-# All services
-docker compose logs -f
-
-# Specific service
-docker compose logs -f airflow
-
-# Last N lines
-docker compose logs --tail=100 airflow
-
-# With timestamps
-docker compose logs -f -t airflow
-```
-
-### Resetting Everything
-
-```bash
-# Stop and remove containers, networks
-docker compose down
-
-# Remove all volumes (deletes data)
-docker compose down -v
-
-# Remove images (force rebuild)
-docker compose down --rmi all
-
-# Start fresh
-docker compose up -d --build
-```
-
----
-
-### Service URLs
-
-| Service                   | URL                    | Credentials             |
-| ------------------------- | ---------------------- | ----------------------- |
-| **Airflow Web UI**        | http://localhost:8081  | admin / admin           |
-| **API**                   | http://localhost:8000  | N/A                     |
-| **OpenSearch**            | http://localhost:9200  | N/A                     |
-| **OpenSearch Dashboards** | http://localhost:5601  | N/A                     |
-| **Ollama**                | http://localhost:11434 | N/A                     |
-| **PostgreSQL**            | `localhost:5432`       | rag_user / rag_password |
-
-### Database Connection String
-
-```
-postgresql://rag_user:rag_password@localhost:5432/rag_db
-```
-
-From within containers:
-
-```
-postgresql://rag_user:rag_password@postgres:5432/rag_db
-```
-
----
-
-## Next Steps
-
-1. **Explore Airflow UI**: http://localhost:8081
-2. **Trigger Test DAG**: Run `hello_world_week1` to verify setup
-3. **Create Custom DAGs**: Add new workflow files to `airflow/dags/`
-4. **Monitor Logs**: Watch execution with `docker compose logs -f`
-5. **Scale Up**: Add more workers or services as needed
-
-For more details, see:
-
-- [Airflow Documentation](https://airflow.apache.org/docs/)
-- [Docker Compose Documentation](https://docs.docker.com/compose/)
-- [OpenSearch Documentation](https://opensearch.org/docs/)
+No license has been specified yet.
