@@ -15,14 +15,35 @@ services:
         condition: service_healthy
       opensearch:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       - WORKERS=${API_WORKERS:-4} # Configurable workers (default: 4)
-      - OPENSEARCH_HOST=http://opensearch:9200
+      - OPENSEARCH__HOST=http://opensearch:9200
       - OLLAMA_HOST=http://ollama:11434
+      - REDIS__HOST=redis
       - POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db
     # Health check is defined in Dockerfile
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     networks:
       - rag-network
@@ -32,7 +53,7 @@ services:
     container_name: rag-opensearch
     environment:
       - discovery.type=${OPENSEARCH_DISCOVERY_TYPE:-single-node}
-      - OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS}
+      - OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}
       - DISABLE_SECURITY_PLUGIN=${OPENSEARCH_DISABLE_SECURITY_PLUGIN:-true}
       - bootstrap.memory_lock=${OPENSEARCH_BOOTSTRAP_MEMORY_LOCK:-true}
     ports:
@@ -64,7 +85,8 @@ services:
       - OPENSEARCH_HOSTS=http://opensearch:9200
       - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
     depends_on:
-      - opensearch
+      opensearch:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
       interval: 30s
@@ -107,7 +129,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER:-rag_user} -d $${POSTGRES_DB:-rag_db}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -148,15 +174,16 @@ services:
       - .env
     environment:
       # Airflow-specific environment setup
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=true
       - AIRFLOW_HOME=/opt/airflow
       # Container hostnames for Airflow
-      - POSTGRES_DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
-      - OPENSEARCH_HOST=http://opensearch:9200
-      - PYTHONPATH=/opt/airflow/src
+      - POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db
+      - OPENSEARCH__HOST=http://opensearch:9200
+      - PYTHONPATH=/opt/airflow
+      - REDIS__HOST=redis
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - airflow_logs:/opt/airflow/logs
@@ -179,6 +206,7 @@ volumes:
   opensearch_data:
   ollama_data:
   airflow_logs:
+  redis_data:
 
 networks:
   rag-network:
