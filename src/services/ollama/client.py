@@ -82,6 +82,100 @@ class OllamaClient:
         except Exception as e:
             raise OllamaException(f"Error listing models: {e}")
 
+    async def pull_model(self, name: str, stream: bool = False) -> dict[str, Any]:
+        """Pull a model from the Ollama library.
+
+        :param name: Model name (e.g. 'llama3.2:latest')
+        :param stream: Whether to stream progress (default: False)
+        :returns: Response dictionary from Ollama
+        """
+        try:
+            # Long timeout for model downloading
+            pull_timeout = httpx.Timeout(600.0)
+            async with httpx.AsyncClient(timeout=pull_timeout) as client:
+                data = {"name": name, "stream": stream}
+                logger.info(f"Pulling model '{name}' from Ollama...")
+                response = await client.post(f"{self.base_url}/api/pull", json=data)
+
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info(f"Successfully pulled model '{name}'")
+                    return result
+                else:
+                    raise OllamaException(
+                        f"Failed to pull model '{name}': {response.status_code} - {response.text}"
+                    )
+
+        except httpx.ConnectError as e:
+            raise OllamaConnectionError(f"Cannot connect to Ollama service: {e}")
+        except httpx.TimeoutException as e:
+            raise OllamaTimeoutError(f"Ollama pull timeout for model '{name}': {e}")
+        except OllamaException:
+            raise
+        except Exception as e:
+            raise OllamaException(f"Error pulling model '{name}': {e}")
+
+    async def delete_model(self, name: str) -> dict[str, Any]:
+        """Delete a local model from Ollama.
+
+        :param name: Model name to delete
+        :returns: Status dictionary
+        """
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                data = {"name": name}
+                logger.info(f"Deleting model '{name}' from Ollama...")
+                response = await client.request(
+                    "DELETE", f"{self.base_url}/api/delete", json=data
+                )
+
+                if response.status_code == 200:
+                    logger.info(f"Successfully deleted model '{name}'")
+                    return {
+                        "status": "success",
+                        "message": f"Model '{name}' deleted successfully",
+                    }
+                else:
+                    raise OllamaException(
+                        f"Failed to delete model '{name}': {response.status_code}"
+                    )
+
+        except httpx.ConnectError as e:
+            raise OllamaConnectionError(f"Cannot connect to Ollama service: {e}")
+        except httpx.TimeoutException as e:
+            raise OllamaTimeoutError(f"Ollama service timeout: {e}")
+        except OllamaException:
+            raise
+        except Exception as e:
+            raise OllamaException(f"Error deleting model '{name}': {e}")
+
+    async def show_model(self, name: str) -> dict[str, Any]:
+        """Get detailed information about a local model.
+
+        :param name: Model name
+        :returns: Model details dictionary
+        """
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                data = {"name": name}
+                response = await client.post(f"{self.base_url}/api/show", json=data)
+
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    raise OllamaException(
+                        f"Failed to get details for model '{name}': {response.status_code}"
+                    )
+
+        except httpx.ConnectError as e:
+            raise OllamaConnectionError(f"Cannot connect to Ollama service: {e}")
+        except httpx.TimeoutException as e:
+            raise OllamaTimeoutError(f"Ollama service timeout: {e}")
+        except OllamaException:
+            raise
+        except Exception as e:
+            raise OllamaException(f"Error showing model '{name}': {e}")
+
     async def generate(
         self, model: str, prompt: str, stream: bool = False, **kwargs
     ) -> dict[str, Any] | None:
