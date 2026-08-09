@@ -8,10 +8,15 @@ from .client import OpenSearchClient
 
 
 @lru_cache(maxsize=1)
+def _get_opensearch_client_cached(host: str) -> OpenSearchClient:
+    settings = get_settings()
+    return OpenSearchClient(host=host, settings=settings)
+
+
 def make_opensearch_client(settings: Settings | None = None) -> OpenSearchClient:
     """Factory function to create cached OpenSearch client.
 
-    Uses lru_cache to maintain a singleton instance for efficiency.
+    Uses lru_cache by host string to maintain a singleton instance.
 
     :param settings: Optional settings instance
     :returns: Cached OpenSearchClient instance
@@ -19,7 +24,7 @@ def make_opensearch_client(settings: Settings | None = None) -> OpenSearchClient
     if settings is None:
         settings = get_settings()
 
-    return OpenSearchClient(host=settings.opensearch.host, settings=settings)
+    return _get_opensearch_client_cached(settings.opensearch.host)
 
 
 def make_opensearch_client_fresh(

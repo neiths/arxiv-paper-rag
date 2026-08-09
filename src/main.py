@@ -6,7 +6,7 @@ import uvicorn
 from fastapi import FastAPI
 from src.config import get_settings
 from src.db.factory import make_database
-from src.routers import hybrid_search, ping
+from src.routers import hybrid_search, ollama, ping
 from src.routers.ask import ask_router, stream_router
 from src.services.arxiv.factory import make_arxiv_client
 from src.services.cache.factory import make_cache_client
@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
     logger.info("API ready")
     yield
 
-    database.teardown()
+    database.shutdown()
     logger.info("API shutdown complete")
 
 
@@ -92,6 +92,9 @@ app.include_router(
 )  # Search chunks with BM25/hybrid
 app.include_router(ask_router, prefix="/api/v1")  # RAG question answering with LLM
 app.include_router(stream_router, prefix="/api/v1")  # Streaming RAG responses
+app.include_router(
+    ollama.router, prefix="/api/v1"
+)  # Ollama model management and text generation
 
 
 if __name__ == "__main__":
