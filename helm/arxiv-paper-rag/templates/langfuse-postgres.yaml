@@ -1,0 +1,93 @@
+{{- if .Values.langfuse.enabled -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "arxiv-paper-rag.fullname" . }}-langfuse-postgres
+  labels:
+    {{- include "arxiv-paper-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: langfuse-postgres
+spec:
+  serviceName: {{ include "arxiv-paper-rag.fullname" . }}-langfuse-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: langfuse-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: langfuse-postgres
+    spec:
+      containers:
+        - name: langfuse-postgres
+          image: "{{ .Values.langfuse.postgres.image.repository }}:{{ .Values.langfuse.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.langfuse.postgres.image.pullPolicy }}
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "arxiv-paper-rag.fullname" . }}-secret
+                  key: LANGFUSE_POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "arxiv-paper-rag.fullname" . }}-secret
+                  key: LANGFUSE_POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "arxiv-paper-rag.fullname" . }}-secret
+                  key: LANGFUSE_POSTGRES_PASSWORD
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: "password"
+            - name: TZ
+              value: "UTC"
+            - name: PGTZ
+              value: "UTC"
+          volumeMounts:
+            - name: langfuse-postgres-data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+            initialDelaySeconds: 15
+            periodSeconds: 20
+  volumeClaimTemplates:
+    - metadata:
+        name: langfuse-postgres-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.langfuse.postgres.persistence.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.langfuse.postgres.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "arxiv-paper-rag.fullname" . }}-langfuse-postgres
+  labels:
+    {{- include "arxiv-paper-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: langfuse-postgres
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app.kubernetes.io/component: langfuse-postgres
+{{- end }}

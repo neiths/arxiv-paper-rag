@@ -1,0 +1,87 @@
+{{- if .Values.opensearch.enabled -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "arxiv-paper-rag.fullname" . }}-opensearch
+  labels:
+    {{- include "arxiv-paper-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opensearch
+spec:
+  serviceName: {{ include "arxiv-paper-rag.fullname" . }}-opensearch
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: opensearch
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: opensearch
+    spec:
+      initContainers:
+        - name: init-sysctl
+          image: busybox:latest
+          command: ['sysctl', '-w', 'vm.max_map_count=262144']
+          securityContext:
+            privileged: true
+      containers:
+        - name: opensearch
+          image: "{{ .Values.opensearch.image.repository }}:{{ .Values.opensearch.image.tag }}"
+          imagePullPolicy: {{ .Values.opensearch.image.pullPolicy }}
+          ports:
+            - containerPort: 9200
+              name: http
+            - containerPort: 9600
+              name: transport
+          env:
+            - name: discovery.type
+              value: {{ .Values.opensearch.discoveryType | quote }}
+            - name: OPENSEARCH_JAVA_OPTS
+              value: {{ .Values.opensearch.javaOpts | quote }}
+            - name: DISABLE_SECURITY_PLUGIN
+              value: {{ .Values.opensearch.disableSecurityPlugin | quote }}
+            - name: bootstrap.memory_lock
+              value: "true"
+          volumeMounts:
+            - name: opensearch-data
+              mountPath: /usr/share/opensearch/data
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 60
+            periodSeconds: 20
+  volumeClaimTemplates:
+    - metadata:
+        name: opensearch-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: {{ .Values.opensearch.persistence.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.opensearch.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "arxiv-paper-rag.fullname" . }}-opensearch
+  labels:
+    {{- include "arxiv-paper-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opensearch
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9200
+      targetPort: 9200
+      name: http
+    - port: 9600
+      targetPort: 9600
+      name: transport
+  selector:
+    app.kubernetes.io/component: opensearch
+{{- end }}

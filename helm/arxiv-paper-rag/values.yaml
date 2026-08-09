@@ -1,0 +1,203 @@
+# Default values for arxiv-paper-rag umbrella helm chart.
+
+global:
+  environment: development
+  debug: true
+
+# API Service
+api:
+  enabled: true
+  image:
+    repository: arxiv-rag-api
+    tag: 0.1.0
+    pullPolicy: IfNotPresent
+  workers: 4
+  service:
+    type: ClusterIP
+    port: 8000
+    nodePort: 30800
+
+# PostgreSQL Service (App DB)
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: 16-alpine
+    pullPolicy: IfNotPresent
+  db: rag_db
+  user: rag_user
+  password: rag_password
+  persistence:
+    size: 5Gi
+    storageClass: standard
+  service:
+    port: 5432
+
+# Redis Cache Service
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: 7-alpine
+    pullPolicy: IfNotPresent
+  maxmemory: 256mb
+  persistence:
+    size: 2Gi
+    storageClass: standard
+  service:
+    port: 6379
+
+# OpenSearch Service
+opensearch:
+  enabled: true
+  image:
+    repository: opensearchproject/opensearch
+    tag: 2.19.0
+    pullPolicy: IfNotPresent
+  javaOpts: "-Xms512m -Xmx512m"
+  discoveryType: single-node
+  disableSecurityPlugin: true
+  persistence:
+    size: 10Gi
+    storageClass: standard
+  service:
+    httpPort: 9200
+    transportPort: 9600
+    nodePort: 30920
+
+# OpenSearch Dashboards Service
+opensearchDashboards:
+  enabled: true
+  image:
+    repository: opensearchproject/opensearch-dashboards
+    tag: 2.19.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 5601
+    nodePort: 30561
+
+# Ollama LLM Service
+ollama:
+  enabled: true
+  image:
+    repository: ollama/ollama
+    tag: 0.11.2
+    pullPolicy: IfNotPresent
+  model: "llama3.2:latest"
+  persistence:
+    size: 20Gi
+    storageClass: standard
+  service:
+    port: 11434
+
+# Adminer (PostgreSQL GUI)
+adminer:
+  enabled: true
+  image:
+    repository: adminer
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+    nodePort: 30882
+
+# Airflow Service
+airflow:
+  enabled: true
+  image:
+    repository: arxiv-rag-airflow
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+    nodePort: 30881
+
+# ClickHouse (For Langfuse Analytics)
+clickhouse:
+  enabled: true
+  image:
+    repository: clickhouse/clickhouse-server
+    tag: 24.8-alpine
+    pullPolicy: IfNotPresent
+  db: langfuse
+  user: langfuse
+  password: langfuse
+  persistence:
+    size: 5Gi
+    storageClass: standard
+  service:
+    httpPort: 8123
+    nativePort: 9000
+
+# Langfuse Stack
+langfuse:
+  enabled: true
+
+  postgres:
+    image:
+      repository: postgres
+      tag: "17"
+      pullPolicy: IfNotPresent
+    db: langfuse
+    user: langfuse
+    password: langfuse
+    persistence:
+      size: 5Gi
+      storageClass: standard
+    service:
+      port: 5432
+
+  redis:
+    image:
+      repository: redis
+      tag: "7"
+      pullPolicy: IfNotPresent
+    password: langfuse_redis_password
+    service:
+      port: 6379
+
+  minio:
+    image:
+      repository: minio/minio
+      tag: latest
+      pullPolicy: IfNotPresent
+    rootUser: langfuse_minio
+    rootPassword: langfuse_minio_secret
+    persistence:
+      size: 10Gi
+      storageClass: standard
+    service:
+      apiPort: 9000
+      consolePort: 9001
+      nodePortConsole: 30091
+
+  web:
+    image:
+      repository: langfuse/langfuse
+      tag: "3"
+      pullPolicy: IfNotPresent
+    nextauthSecret: "changeme-v3-nextauth-secret-min-32-chars-recommended"
+    salt: "changeme-v3-salt-min-32-chars-recommended-for-security"
+    encryptionKey: "0000000000000000000000000000000000000000000000000000000000000000"
+    service:
+      type: ClusterIP
+      port: 3000
+      nodePort: 30301
+
+  worker:
+    image:
+      repository: langfuse/langfuse-worker
+      tag: "3"
+      pullPolicy: IfNotPresent
+    service:
+      port: 3030
+
+# External Integrations
+external:
+  jinaApiKey: ""
+  telegram:
+    enabled: false
+    botToken: ""
