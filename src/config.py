@@ -161,6 +161,22 @@ class TelegramSettings(BaseConfigSettings):
     enabled: bool = False
 
 
+class FacebookSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="FACEBOOK__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    page_id: str = ""
+    page_access_token: str = ""
+    graph_api_version: str = "v20.0"
+    base_url: str = "https://graph.facebook.com"
+    enabled: bool = False
+
+
 class Settings(BaseConfigSettings):
     app_version: str = "0.1.0"
     debug: bool = True
@@ -188,6 +204,7 @@ class Settings(BaseConfigSettings):
     langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     telegram: TelegramSettings = Field(default_factory=TelegramSettings)
+    facebook: FacebookSettings = Field(default_factory=FacebookSettings)
 
     @field_validator("postgres_database_url")
     @classmethod
