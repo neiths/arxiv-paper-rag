@@ -1,0 +1,47 @@
+{{- if .Values.adminer.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "arxiv-paper-rag.fullname" . }}-adminer
+  labels:
+    {{- include "arxiv-paper-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: adminer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: adminer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: adminer
+    spec:
+      containers:
+        - name: adminer
+          image: "{{ .Values.adminer.image.repository }}:{{ .Values.adminer.image.tag }}"
+          imagePullPolicy: {{ .Values.adminer.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: ADMINER_DEFAULT_SERVER
+              value: "{{ include "arxiv-paper-rag.fullname" . }}-postgres"
+            - name: ADMINER_DESIGN
+              value: "nette"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "arxiv-paper-rag.fullname" . }}-adminer
+  labels:
+    {{- include "arxiv-paper-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: adminer
+spec:
+  type: {{ .Values.adminer.service.type }}
+  ports:
+    - port: {{ .Values.adminer.service.port }}
+      targetPort: 8080
+      name: http
+  selector:
+    app.kubernetes.io/component: adminer
+{{- end }}

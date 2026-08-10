@@ -1,0 +1,64 @@
+{{- if .Values.langfuse.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "arxiv-paper-rag.fullname" . }}-langfuse-redis
+  labels:
+    {{- include "arxiv-paper-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: langfuse-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: langfuse-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: langfuse-redis
+    spec:
+      containers:
+        - name: langfuse-redis
+          image: "{{ .Values.langfuse.redis.image.repository }}:{{ .Values.langfuse.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.langfuse.redis.image.pullPolicy }}
+          command:
+            - redis-server
+            - --requirepass
+            - {{ .Values.langfuse.redis.password | quote }}
+          ports:
+            - containerPort: 6379
+              name: redis
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - {{ .Values.langfuse.redis.password | quote }}
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - {{ .Values.langfuse.redis.password | quote }}
+                - ping
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "arxiv-paper-rag.fullname" . }}-langfuse-redis
+  labels:
+    {{- include "arxiv-paper-rag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: langfuse-redis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+  selector:
+    app.kubernetes.io/component: langfuse-redis
+{{- end }}

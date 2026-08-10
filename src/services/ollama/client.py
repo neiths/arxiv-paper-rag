@@ -176,6 +176,28 @@ class OllamaClient:
         except Exception as e:
             raise OllamaException(f"Error showing model '{name}': {e}")
 
+    def _build_payload(
+        self, model: str, prompt: str, stream: bool, **kwargs
+    ) -> dict[str, Any]:
+        """Helper to build Ollama request payload with proper options nested dict."""
+        options = kwargs.pop("options", None) or {}
+        model_opts = (
+            "temperature",
+            "top_p",
+            "top_k",
+            "repeat_penalty",
+            "num_ctx",
+            "stop",
+        )
+        for opt in model_opts:
+            if opt in kwargs:
+                options[opt] = kwargs.pop(opt)
+
+        payload = {"model": model, "prompt": prompt, "stream": stream, **kwargs}
+        if options:
+            payload["options"] = options
+        return payload
+
     async def generate(
         self, model: str, prompt: str, stream: bool = False, **kwargs
     ) -> dict[str, Any] | None:
@@ -189,18 +211,14 @@ class OllamaClient:
             **kwargs: Additional generation parameters
 
         Returns:
-            Response dictionary with added usage_metadata field containing:
-                - prompt_tokens: Number of tokens in the prompt
-                - completion_tokens: Number of tokens in the completion
-                - total_tokens: Total tokens used
-                - latency_ms: Generation latency in milliseconds
+            Response dictionary with added usage_metadata field
         """
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                data = {"model": model, "prompt": prompt, "stream": stream, **kwargs}
+                data = self._build_payload(model, prompt, stream, **kwargs)
 
                 logger.info(
-                    f"Sending request to Ollama: model={model}, stream={stream}, extra_params={kwargs}"
+                    f"Sending request to Ollama: model={model}, stream={stream}, payload_keys={list(data.keys())}"
                 )
                 response = await client.post(f"{self.base_url}/api/generate", json=data)
 
@@ -275,7 +293,7 @@ class OllamaClient:
         """
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                data = {"model": model, "prompt": prompt, "stream": True, **kwargs}
+                data = self._build_payload(model, prompt, stream=True, **kwargs)
 
                 logger.info(f"Starting streaming generation: model={model}")
 

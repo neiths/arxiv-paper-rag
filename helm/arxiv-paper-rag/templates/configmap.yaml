@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "arxiv-paper-rag.fullname" . }}-config
+  labels:
+    {{- include "arxiv-paper-rag.labels" . | nindent 4 }}
+data:
+  ENVIRONMENT: {{ .Values.global.environment | quote }}
+  DEBUG: {{ .Values.global.debug | quote }}
+
+  # Services endpoints inside cluster DNS
+  POSTGRES_HOST: "{{ include "arxiv-paper-rag.fullname" . }}-postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: {{ .Values.postgres.db | quote }}
+
+  OPENSEARCH_HOST: "http://{{ include "arxiv-paper-rag.fullname" . }}-opensearch:9200"
+  OPENSEARCH__HOST: "http://{{ include "arxiv-paper-rag.fullname" . }}-opensearch:9200"
+  OLLAMA_HOST: "http://{{ include "arxiv-paper-rag.fullname" . }}-ollama:11434"
+  REDIS__HOST: "{{ include "arxiv-paper-rag.fullname" . }}-redis"
+  REDIS__PORT: "6379"
+
+  # arXiv API Configuration
+  ARXIV__MAX_RESULTS: "15"
+  ARXIV__BASE_URL: "https://export.arxiv.org/api/query"
+  ARXIV__PDF_CACHE_DIR: "/tmp/arxiv_pdfs"
+  ARXIV__RATE_LIMIT_DELAY: "3.0"
+  ARXIV__TIMEOUT_SECONDS: "30"
+  ARXIV__SEARCH_CATEGORY: "cs.AI"
+  ARXIV__DOWNLOAD_MAX_RETRIES: "3"
+  ARXIV__DOWNLOAD_RETRY_DELAY_BASE: "5.0"
+  ARXIV__MAX_CONCURRENT_DOWNLOADS: "5"
+  ARXIV__MAX_CONCURRENT_PARSING: "1"
+
+  # PDF Parser
+  PDF_PARSER__MAX_PAGES: "30"
+  PDF_PARSER__MAX_FILE_SIZE_MB: "20"
+  PDF_PARSER__DO_OCR: "false"
+  PDF_PARSER__DO_TABLE_STRUCTURE: "true"
+
+  # OpenSearch Config
+  OPENSEARCH__INDEX_NAME: "arxiv-papers"
+  OPENSEARCH__CHUNK_INDEX_SUFFIX: "chunks"
+  OPENSEARCH__MAX_TEXT_SIZE: "1000000"
+  OPENSEARCH__VECTOR_DIMENSION: "1024"
+  OPENSEARCH__VECTOR_SPACE_TYPE: "cosinesimil"
+  OPENSEARCH__RRF_PIPELINE_NAME: "hybrid-rrf-pipeline"
+  OPENSEARCH__HYBRID_SEARCH_SIZE_MULTIPLIER: "2"
+
+  # Chunking
+  CHUNKING__CHUNK_SIZE: "600"
+  CHUNKING__OVERLAP_SIZE: "100"
+  CHUNKING__MIN_CHUNK_SIZE: "100"
+  CHUNKING__SECTION_BASED: "true"
+
+  # Ollama Model
+  OLLAMA_MODEL: {{ .Values.ollama.model | quote }}
+  OLLAMA_TIMEOUT: "300"
+
+  # Langfuse
+  LANGFUSE_ENABLED: "true"
+  LANGFUSE_HOST: "http://{{ include "arxiv-paper-rag.fullname" . }}-langfuse-web:3000"
+  LANGFUSE_FLUSH_AT: "15"
+  LANGFUSE_FLUSH_INTERVAL: "1.0"
+  LANGFUSE_DEBUG: "true"
+
+  # Airflow
+  AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+  AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+  AIRFLOW_HOME: "/opt/airflow"
