@@ -71,9 +71,14 @@ def get_ollama_client(request: Request) -> OllamaClient:
     return request.app.state.ollama_client
 
 
-def get_cache_client(request: Request) -> CacheClient | None:
-    """Get cache client from the request state."""
-    return getattr(request.app.state, "cache_client", None)
+from src.services.facebook.client import FacebookClient
+
+
+def get_facebook_client(request: Request) -> FacebookClient:
+    """Get Facebook client from the request state."""
+    return getattr(
+        request.app.state, "facebook_client", FacebookClient(get_settings().facebook)
+    )
 
 
 # Dependency annotations
@@ -86,3 +91,4 @@ PDFParserDep = Annotated[PDFParserService, Depends(get_pdf_parser)]
 EmbeddingsDep = Annotated[JinaEmbeddingsClient, Depends(get_embeddings_service)]
 OllamaDep = Annotated[OllamaClient, Depends(get_ollama_client)]
 CacheDep = Annotated[CacheClient | None, Depends(get_cache_client)]
+FacebookDep = Annotated[FacebookClient, Depends(get_facebook_client)]

@@ -6,11 +6,12 @@ import uvicorn
 from fastapi import FastAPI
 from src.config import get_settings
 from src.db.factory import make_database
-from src.routers import hybrid_search, ollama, ping
+from src.routers import agent, hybrid_search, ollama, ping
 from src.routers.ask import ask_router, stream_router
 from src.services.arxiv.factory import make_arxiv_client
 from src.services.cache.factory import make_cache_client
 from src.services.embeddings.factory import make_embeddings_service
+from src.services.facebook.factory import make_facebook_client
 from src.services.ollama.factory import make_ollama_client
 from src.services.opensearch.factory import make_opensearch_client
 from src.services.pdf_parser.factory import make_pdf_parser_service
@@ -67,8 +68,9 @@ async def lifespan(app: FastAPI):
     app.state.embeddings_service = make_embeddings_service()
     app.state.ollama_client = make_ollama_client()
     app.state.cache_client = make_cache_client(settings)
+    app.state.facebook_client = make_facebook_client()
     logger.info(
-        "Services initialized: arXiv API client, PDF parser, OpenSearch, Embeddings, Ollama, Langfuse, Cache"
+        "Services initialized: arXiv API client, PDF parser, OpenSearch, Embeddings, Ollama, Langfuse, Cache, Facebook"
     )
 
     logger.info("API ready")
@@ -80,7 +82,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="arXiv Paper Curator API",
-    description="Personal arXiv CS.AI paper curator with RAG capabilities",
+    description="Personal arXiv CS.AI paper curator with RAG capabilities and LangGraph Facebook Agent",
     version=os.getenv("APP_VERSION", "0.1.0"),
     lifespan=lifespan,
 )
@@ -95,6 +97,9 @@ app.include_router(stream_router, prefix="/api/v1")  # Streaming RAG responses
 app.include_router(
     ollama.router, prefix="/api/v1"
 )  # Ollama model management and text generation
+app.include_router(
+    agent.router, prefix="/api/v1"
+)  # LangGraph Agent for Facebook Paper Summarization
 
 
 if __name__ == "__main__":

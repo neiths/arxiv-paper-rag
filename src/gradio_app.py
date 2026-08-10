@@ -138,132 +138,251 @@ async def stream_response(
         yield f"Unexpected error: {e!s}"
 
 
+async def run_facebook_agent(
+    arxiv_id: str,
+    model: str,
+    dry_run: bool,
+) -> tuple[str, str]:
+    """Call the LangGraph Facebook Publisher Agent endpoint."""
+    payload = {
+        "arxiv_id": arxiv_id.strip() if arxiv_id.strip() else None,
+        "model": model,
+        "dry_run": dry_run,
+    }
+    try:
+        url = f"{API_BASE_URL}/agent/publish-facebook"
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.post(url, json=payload)
+            if response.status_code != 200:
+                return (
+                    f"❌ **API Error**: Status {response.status_code}\n\n{response.text}",
+                    "",
+                )
+
+            data = response.json()
+            status_val = data.get("status")
+            error = data.get("error")
+            paper_title = data.get("paper_title", "Unknown Title")
+            arxiv_id_res = data.get("arxiv_id", "")
+            post_content = data.get("facebook_post", "")
+            used_full_text = data.get("used_full_text", False)
+            post_id = data.get("facebook_post_id")
+
+            if error:
+                status_text = f"❌ **Error**: {error}\n- **Paper**: {paper_title} (`{arxiv_id_res}`)"
+            elif status_val == "published":
+                status_text = (
+                    f"✅ **Published to Facebook Page!**\n\n"
+                    f"- **Post ID**: `{post_id}`\n"
+                    f"- **Paper Title**: {paper_title}\n"
+                    f"- **arXiv ID**: `{arxiv_id_res}`\n"
+                    f"- **Source Used**: {'Full Parsed PDF Text' if used_full_text else 'arXiv Abstract'}"
+                )
+            else:  # dry_run_success
+                status_text = (
+                    f"🔍 **Dry Run Complete (Draft Generated)**\n\n"
+                    f"- **Paper Title**: {paper_title}\n"
+                    f"- **arXiv ID**: `{arxiv_id_res}`\n"
+                    f"- **Source Used**: {'Full Parsed PDF Text' if used_full_text else 'arXiv Abstract'}\n"
+                    f"- **Note**: Post was not published to Facebook API. Uncheck 'Dry Run Mode' to publish live."
+                )
+
+            return status_text, post_content
+
+    except httpx.RequestError as e:
+        return (
+            f"❌ **Connection Error**: {e!s}\nMake sure the API server is running at `{API_BASE_URL}`",
+            "",
+        )
+    except Exception as e:
+        return f"❌ **Unexpected Error**: {e!s}", ""
+
+
 def create_gradio_interface():
     """Create and configure the Gradio interface"""
 
     with gr.Blocks(
-        title="arXiv Paper Curator - RAG Chat",
+        title="arXiv Paper Curator & Facebook Agent",
         theme=gr.themes.Soft(),
     ) as interface:
         gr.Markdown(
             """
-            # 🔬 arXiv Paper Curator - RAG Chat
+            # 🔬 arXiv Paper Curator & LangGraph Facebook Agent
 
-            Ask questions about machine learning and AI research papers from arXiv.
-            The system will search through indexed papers and provide answers with sources.
+            Search papers, chat with your library via RAG, or generate structured Facebook posts using LangGraph agents.
             """
         )
 
-        with gr.Row():
-            with gr.Column(scale=3):
-                query_input = gr.Textbox(
-                    label="Your Question",
-                    placeholder="What are transformers in machine learning?",
-                    lines=2,
-                    max_lines=5,
+        with gr.Tabs():
+            with gr.TabItem("💬 RAG Chat"):
+                with gr.Row():
+                    with gr.Column(scale=3):
+                        query_input = gr.Textbox(
+                            label="Your Question",
+                            placeholder="What are transformers in machine learning?",
+                            lines=2,
+                            max_lines=5,
+                        )
+
+                    with gr.Column(scale=1):
+                        submit_btn = gr.Button(
+                            "Ask Question", variant="primary", size="lg"
+                        )
+
+                with (
+                    gr.Row(),
+                    gr.Column(),
+                    gr.Accordion("Advanced Options", open=False),
+                ):
+                    top_k = gr.Slider(
+                        minimum=1,
+                        maximum=10,
+                        value=3,
+                        step=1,
+                        label="Number of chunks to retrieve",
+                        info="More chunks = more context but slower generation",
+                    )
+
+                    use_hybrid = gr.Checkbox(
+                        value=True,
+                        label="Use hybrid search (BM25 + vector embeddings)",
+                        info="Usually better results than keyword-only search",
+                    )
+
+                    model_choice = gr.Dropdown(
+                        choices=[
+                            "llama3.2:latest",
+                            "llama3.2:3b",
+                            "llama3.1:8b",
+                            "qwen2.5:7b",
+                        ],
+                        value=DEFAULT_MODEL,
+                        label="LLM Model",
+                        info="Larger models may give better answers but are slower",
+                    )
+
+                    categories = gr.Textbox(
+                        label="arXiv Categories (optional)",
+                        placeholder="cs.AI, cs.LG, cs.CL",
+                        info="Comma-separated. Leave empty for all categories",
+                    )
+
+                response_output = gr.Markdown(
+                    label="Answer",
+                    value="Ask a question to get started!",
+                    height=400,
+                    elem_classes=["response-markdown"],
                 )
 
-            with gr.Column(scale=1):
-                submit_btn = gr.Button("Ask Question", variant="primary", size="lg")
+                # Examples
+                gr.Examples(
+                    examples=[
+                        [
+                            "What are transformers in machine learning?",
+                            3,
+                            True,
+                            "llama3.2:latest",
+                            "cs.AI, cs.LG",
+                        ],
+                        [
+                            "How do convolutional neural networks work?",
+                            5,
+                            True,
+                            "llama3.2:latest",
+                            "cs.CV, cs.LG",
+                        ],
+                        [
+                            "What is attention mechanism in deep learning?",
+                            4,
+                            False,
+                            "llama3.2:latest",
+                            "cs.AI",
+                        ],
+                        [
+                            "Explain reinforcement learning algorithms",
+                            3,
+                            True,
+                            "llama3.2:latest",
+                            "cs.LG, cs.AI",
+                        ],
+                        [
+                            "What are the latest developments in NLP?",
+                            5,
+                            True,
+                            "llama3.2:latest",
+                            "cs.CL",
+                        ],
+                    ],
+                    inputs=[query_input, top_k, use_hybrid, model_choice, categories],
+                )
 
-        with gr.Row(), gr.Column(), gr.Accordion("Advanced Options", open=False):
-            top_k = gr.Slider(
-                minimum=1,
-                maximum=10,
-                value=3,
-                step=1,
-                label="Number of chunks to retrieve",
-                info="More chunks = more context but slower generation",
-            )
+                # Handle submission
+                submit_btn.click(
+                    fn=stream_response,
+                    inputs=[query_input, top_k, use_hybrid, model_choice, categories],
+                    outputs=[response_output],
+                    show_progress=True,
+                )
 
-            use_hybrid = gr.Checkbox(
-                value=True,
-                label="Use hybrid search (BM25 + vector embeddings)",
-                info="Usually better results than keyword-only search",
-            )
+                # Handle Enter key
+                query_input.submit(
+                    fn=stream_response,
+                    inputs=[query_input, top_k, use_hybrid, model_choice, categories],
+                    outputs=[response_output],
+                    show_progress=True,
+                )
 
-            model_choice = gr.Dropdown(
-                choices=[
-                    "llama3.2:latest",
-                    "llama3.2:3b",
-                    "llama3.1:8b",
-                    "qwen2.5:7b",
-                ],
-                value=DEFAULT_MODEL,
-                label="LLM Model",
-                info="Larger models may give better answers but are slower",
-            )
+            with gr.TabItem("🤖 Facebook Paper Agent"):
+                gr.Markdown(
+                    """
+                    ### 📢 LangGraph Paper Summarizer & Facebook Publisher Agent
+                    Select a paper (or leave blank to pick the **newest paper in DB**).
+                    The agent will fetch the paper, summarize key features & methodology, format it, and post it to your Facebook Page.
+                    """
+                )
+                with gr.Row():
+                    with gr.Column(scale=2):
+                        fb_arxiv_id = gr.Textbox(
+                            label="arXiv ID (optional)",
+                            placeholder="e.g., 2507.17748 (Leave blank to pick newest paper in DB)",
+                        )
+                        fb_model_choice = gr.Dropdown(
+                            choices=[
+                                "llama3.2:latest",
+                                "llama3.2:3b",
+                                "llama3.1:8b",
+                                "qwen2.5:7b",
+                            ],
+                            value=DEFAULT_MODEL,
+                            label="LLM Model for Agent",
+                        )
+                        fb_dry_run = gr.Checkbox(
+                            value=True,
+                            label="Dry Run Mode (Preview summary without posting to Facebook)",
+                            info="Uncheck this box when you are ready to publish directly to your Facebook Page.",
+                        )
+                        fb_run_btn = gr.Button(
+                            "🚀 Run LangGraph Facebook Agent",
+                            variant="primary",
+                            size="lg",
+                        )
 
-            categories = gr.Textbox(
-                label="arXiv Categories (optional)",
-                placeholder="cs.AI, cs.LG, cs.CL",
-                info="Comma-separated. Leave empty for all categories",
-            )
+                    with gr.Column(scale=3):
+                        fb_status_output = gr.Markdown(
+                            label="Agent Status",
+                            value="*Click 'Run LangGraph Facebook Agent' to start.*",
+                        )
+                        fb_post_preview = gr.Markdown(
+                            label="Facebook Post Content Preview",
+                            value="",
+                        )
 
-        response_output = gr.Markdown(
-            label="Answer",
-            value="Ask a question to get started!",
-            height=400,
-            elem_classes=["response-markdown"],
-        )
-
-        # Examples
-        gr.Examples(
-            examples=[
-                [
-                    "What are transformers in machine learning?",
-                    3,
-                    True,
-                    "llama3.2:latest",
-                    "cs.AI, cs.LG",
-                ],
-                [
-                    "How do convolutional neural networks work?",
-                    5,
-                    True,
-                    "llama3.2:latest",
-                    "cs.CV, cs.LG",
-                ],
-                [
-                    "What is attention mechanism in deep learning?",
-                    4,
-                    False,
-                    "llama3.2:latest",
-                    "cs.AI",
-                ],
-                [
-                    "Explain reinforcement learning algorithms",
-                    3,
-                    True,
-                    "llama3.2:latest",
-                    "cs.LG, cs.AI",
-                ],
-                [
-                    "What are the latest developments in NLP?",
-                    5,
-                    True,
-                    "llama3.2:latest",
-                    "cs.CL",
-                ],
-            ],
-            inputs=[query_input, top_k, use_hybrid, model_choice, categories],
-        )
-
-        # Handle submission
-        submit_btn.click(
-            fn=stream_response,
-            inputs=[query_input, top_k, use_hybrid, model_choice, categories],
-            outputs=[response_output],
-            show_progress=True,
-        )
-
-        # Handle Enter key
-        query_input.submit(
-            fn=stream_response,
-            inputs=[query_input, top_k, use_hybrid, model_choice, categories],
-            outputs=[response_output],
-            show_progress=True,
-        )
+                fb_run_btn.click(
+                    fn=run_facebook_agent,
+                    inputs=[fb_arxiv_id, fb_model_choice, fb_dry_run],
+                    outputs=[fb_status_output, fb_post_preview],
+                    show_progress=True,
+                )
 
         gr.Markdown(
             """
