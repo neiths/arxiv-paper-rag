@@ -8,21 +8,23 @@ on:
 
 jobs:
   test:
+    name: Run pytest
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install uv
+      - name: Set up uv and Python
         uses: astral-sh/setup-uv@v5
         with:
+          python-version: "3.12"
           enable-cache: true
 
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install dependencies & Run tests
+      - name: Install dependencies
         run: |
           uv sync --all-extras --dev
+
+      - name: Run pytest
+        run: |
           uv run pytest tests/ -v
