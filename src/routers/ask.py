@@ -133,9 +133,7 @@ async def ask_question(
 
             # Retrieve chunks
             chunks, sources, _ = await _prepare_chunks_and_sources(
-                request,
-                opensearch_client,
-                embeddings_service,
+                request, opensearch_client, embeddings_service, rag_tracer, trace
             )
 
             if not chunks:
