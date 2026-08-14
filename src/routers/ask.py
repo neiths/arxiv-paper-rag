@@ -12,6 +12,7 @@ from src.dependencies import (
     OllamaDep,
     OpenSearchDep,
     SettingsDep,
+    LangfuseDep,
 )
 from src.schemas.api.ask import (
     AskRequest,
@@ -78,6 +79,7 @@ async def ask_question(
     embeddings_service: EmbeddingsDep,
     ollama_client: OllamaDep,
     cache_client: CacheDep,
+    langfuse_tracer: LangfuseDep,
 ) -> AskResponse:
     """Clean RAG endpoint with essential tracing and exact match caching."""
 
@@ -172,6 +174,7 @@ async def ask_question_stream(
     embeddings_service: EmbeddingsDep,
     ollama_client: OllamaDep,
     cache_client: CacheDep,
+    langfuse_tracer: LangfuseDep,
 ) -> StreamingResponse:
     """Clean streaming RAG endpoint."""
 
