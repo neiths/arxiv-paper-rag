@@ -12,6 +12,7 @@ from src.services.arxiv.factory import make_arxiv_client
 from src.services.cache.factory import make_cache_client
 from src.services.embeddings.factory import make_embeddings_service
 from src.services.ollama.factory import make_ollama_client
+from src.services.langfuse.factory import make_langfuse_tracer
 from src.services.opensearch.factory import make_opensearch_client
 from src.services.pdf_parser.factory import make_pdf_parser_service
 
@@ -66,6 +67,7 @@ async def lifespan(app: FastAPI):
     app.state.pdf_parser = make_pdf_parser_service()
     app.state.embeddings_service = make_embeddings_service()
     app.state.ollama_client = make_ollama_client()
+    app.state.langfuse_tracer = make_langfuse_tracer()
     app.state.cache_client = make_cache_client(settings)
     logger.info(
         "Services initialized: arXiv API client, PDF parser, OpenSearch, Embeddings, Ollama, Langfuse, Cache"
@@ -73,6 +75,10 @@ async def lifespan(app: FastAPI):
 
     logger.info("API ready")
     yield
+
+    # cleanup on shutdown
+    if hasattr(app.state, "langfuse_tracer") and app.state.langfuse_tracer:
+        app.state.langfuse_tracer.shutdown()
 
     database.shutdown()
     logger.info("API shutdown complete")
