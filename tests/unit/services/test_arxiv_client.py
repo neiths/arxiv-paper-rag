@@ -75,3 +75,30 @@ class TestArxivClient:
             assert papers[0].abstract == "Test abstract content"
             assert papers[0].authors == ["Test Author"]
             assert papers[0].categories == ["cs.AI"]
+
+    @pytest.mark.asyncio
+    async def test_fetch_papers_with_date_filters(
+        self,
+        arxiv_client,
+        mock_arxiv_response,
+    ):
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_response = MagicMock()
+            mock_response.text = mock_arxiv_response
+            mock_response.raise_for_status.return_value = None
+
+            mock_client.return_value.__aenter__.return_value.get.return_value = (
+                mock_response
+            )
+
+            papers = await arxiv_client.fetch_papers(
+                max_results=1,
+                from_date="20240101",
+                to_date="20240131",
+            )
+
+            assert len(papers) == 1
+            call_args = mock_client.return_value.__aenter__.return_value.get.call_args[
+                0
+            ][0]
+            assert "submittedDate:[202401010000+TO+202401312359]" in call_args
