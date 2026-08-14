@@ -20,6 +20,7 @@ from src.services.embeddings.jina_client import JinaEmbeddingsClient
 from src.services.ollama.client import OllamaClient
 from src.services.opensearch.client import OpenSearchClient
 from src.services.pdf_parser.parser import PDFParserService
+from src.services.langfuse.client import LangfuseTracer
 
 
 @lru_cache
@@ -71,9 +72,14 @@ def get_ollama_client(request: Request) -> OllamaClient:
     return request.app.state.ollama_client
 
 
-def get_cache_client(request: Request) -> CacheClient | None:
+def get_cache_client(request: Request) -> CacheClient:
     """Get cache client from the request state."""
-    return getattr(request.app.state, "cache_client", None)
+    return request.app.state.cache_client
+
+
+def get_langfuse_tracer(request: Request) -> LangfuseTracer:
+    """Get Langfuse tracer from the request state"""
+    return request.app.state.langfuse_tracer
 
 
 # Dependency annotations
@@ -85,4 +91,5 @@ ArxivDep = Annotated[ArxivClient, Depends(get_arxiv_client)]
 PDFParserDep = Annotated[PDFParserService, Depends(get_pdf_parser)]
 EmbeddingsDep = Annotated[JinaEmbeddingsClient, Depends(get_embeddings_service)]
 OllamaDep = Annotated[OllamaClient, Depends(get_ollama_client)]
-CacheDep = Annotated[CacheClient | None, Depends(get_cache_client)]
+CacheDep = Annotated[CacheClient, Depends(get_cache_client)]
+LangfuseDep = Annotated[LangfuseTracer, Depends(get_langfuse_tracer)]
