@@ -18,6 +18,8 @@ from src.schemas.api.ask import (
     AskRequest,
     AskResponse,
 )
+from src.services.langfuse.tracer import RAGTracer
+
 
 logger = logging.getLogger(__name__)
 
@@ -83,87 +85,106 @@ async def ask_question(
 ) -> AskResponse:
     """Clean RAG endpoint with essential tracing and exact match caching."""
 
+    rag_tracer = RAGTracer(langfuse_tracer)
     start_time = time.time()
     effective_model = settings.ollama_model
 
-    if request.model != effective_model:
-        logger.warning(
-            "Requested model '%s' is not the configured Ollama model; using '%s' instead",
-            request.model,
-            effective_model,
-        )
+    with rag_tracer.trace_request("api_user", request.query) as trace:
+
+        if request.model != effective_model:
+            logger.warning(
+                "Requested model '%s' is not the configured Ollama model; using '%s' instead",
+                request.model,
+                effective_model,
+            )
         request = request.model_copy(update={"model": effective_model})
 
-    try:
-        # Check exact cache first
-        cached_response = None
-        if cache_client:
-            try:
-                cached_response = await cache_client.find_cached_response(request)
-                if cached_response:
-                    logger.info("Returning cached response for exact query match")
-                    return cached_response
-            except Exception as e:
-                logger.warning(f"Cache check failed, proceeding with normal flow: {e}")
+        try:
+            # Check exact cache first
+            cached_response = None
+            if cache_client:
+                try:
+                    cached_response = await cache_client.find_cached_response(request)
+                    if cached_response:
+                        logger.info("Returning cached response for exact query match")
+                        return cached_response
+                except Exception as e:
+                    logger.warning(
+                        f"Cache check failed, proceeding with normal flow: {e}"
+                    )
 
-        # Generate query embedding for hybrid search if needed
-        query_embedding = None
+            # Generate query embedding for hybrid search if needed
+            query_embedding = None
 
-        # Retrieve chunks
-        chunks, sources, _ = await _prepare_chunks_and_sources(
-            request,
-            opensearch_client,
-            embeddings_service,
-        )
+            # Retrieve chunks
+            chunks, sources, _ = await _prepare_chunks_and_sources(
+                request,
+                opensearch_client,
+                embeddings_service,
+            )
 
-        if not chunks:
+            if not chunks:
+                response = AskResponse(
+                    query=request.query,
+                    answer="I couldn't find any relevant information in the papers to answer your question.",
+                    sources=[],
+                    chunks_used=0,
+                    search_mode="bm25" if not request.use_hybrid else "hybrid",
+                )
+                rag_tracer.end_request(trace, response.answer, time.time() - start_time)
+                return response
+
+            # Build prompt
+            with rag_tracer.trace_prompt_construction(trace, chunks) as prompt_span:
+                from src.services.ollama.prompts import RAGPromptBuilder
+
+                prompt_builder = RAGPromptBuilder()
+
+                try:
+                    prompt_data = prompt_builder.create_structured_prompt(
+                        request.query, chunks
+                    )
+                    final_prompt = prompt_data["prompt"]
+                except Exception:
+                    final_prompt = prompt_builder.create_rag_prompt(
+                        request.query, chunks
+                    )
+
+                rag_tracer.end_prompt(prompt_span, final_prompt)
+
+            # Generate answer
+            with rag_tracer.trace_generation(
+                trace, request.model, final_prompt
+            ) as gen_span:
+                rag_response = await ollama_client.generate_rag_answer(
+                    query=request.query, chunks=chunks, model=request.model
+                )
+                answer = rag_response.get("answer", "Unable to generate answer")
+                rag_tracer.end_generation(gen_span, answer, request.model)
+
+            # Prepare response
             response = AskResponse(
                 query=request.query,
-                answer="I couldn't find any relevant information in the papers to answer your question.",
-                sources=[],
-                chunks_used=0,
+                answer=answer,
+                sources=sources,
+                chunks_used=len(chunks),
                 search_mode="bm25" if not request.use_hybrid else "hybrid",
             )
+
+            rag_tracer.end_request(trace, answer, time.time() - start_time)
+
+            # Store response in exact match cache
+            if cache_client:
+                try:
+                    await cache_client.store_response(request, response)
+                except Exception as e:
+                    logger.warning(f"Failed to store response in cache: {e}")
+
             return response
 
-        # Build prompt
-        from src.services.ollama.prompts import RAGPromptBuilder
-
-        prompt_builder = RAGPromptBuilder()
-
-        try:
-            prompt_data = prompt_builder.create_structured_prompt(request.query, chunks)
-            final_prompt = prompt_data["prompt"]
-        except Exception:
-            final_prompt = prompt_builder.create_rag_prompt(request.query, chunks)
-
-        # Generate answer
-        rag_response = await ollama_client.generate_rag_answer(
-            query=request.query, chunks=chunks, model=request.model
-        )
-        answer = rag_response.get("answer", "Unable to generate answer")
-
-        # Prepare response
-        response = AskResponse(
-            query=request.query,
-            answer=answer,
-            sources=sources,
-            chunks_used=len(chunks),
-            search_mode="bm25" if not request.use_hybrid else "hybrid",
-        )
-
-        # Store response in exact match cache
-        if cache_client:
-            try:
-                await cache_client.store_response(request, response)
-            except Exception as e:
-                logger.warning(f"Failed to store response in cache: {e}")
-
-        return response
-
-    except Exception as e:
-        logger.error(f"Error processing request: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error(f"Error processing request: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @stream_router.post("/stream")
