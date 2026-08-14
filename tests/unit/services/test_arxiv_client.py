@@ -102,3 +102,15 @@ class TestArxivClient:
                 0
             ][0]
             assert "submittedDate:[202401010000+TO+202401312359]" in call_args
+
+    @pytest.mark.asyncio
+    async def test_fetch_papers_timeout(self, arxiv_client):
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.get.side_effect = (
+                httpx.TimeoutException("Request timed out")
+            )
+
+            with pytest.raises(ArxivAPITimeoutError) as exc_info:
+                await arxiv_client.fetch_papers(max_results=1)
+
+            assert "arXiv API request timed out" in str(exc_info.value)
