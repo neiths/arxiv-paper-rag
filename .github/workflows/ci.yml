@@ -8,21 +8,37 @@ on:
 
 jobs:
   test:
+    name: Run pytest
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install uv
+      - name: Set up uv and Python
         uses: astral-sh/setup-uv@v5
         with:
+          python-version: "3.12"
           enable-cache: true
 
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install dependencies & Run tests
+      - name: Install dependencies
         run: |
-          uv sync --all-extras --dev
-          uv run pytest tests/ -v
+          # If using uv.lock (recommended):
+          uv sync --frozen --all-extras --dev
+
+          # If you do not have a uv.lock file yet, use this instead:
+          # uv sync --all-extras --dev
+
+      - name: Run pytest with coverage
+        run: |
+          uv run pytest tests/ -v \
+            --cov=. \
+            --cov-report=term \
+            --cov-report=html:coverage-html
+
+      - name: Upload Test Coverage HTML Report
+        if: always() && matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-coverage-report
+          path: coverage-html/
