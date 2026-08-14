@@ -32,43 +32,58 @@ async def _prepare_chunks_and_sources(
     request: AskRequest,
     opensearch_client,
     embeddings_service,
+    rag_tracer,
+    trace=None,
 ) -> tuple[list[dict], list[str], list[str]]:
     """Retrieve and prepare chunks for RAG with clean tracing."""
 
     query_embedding = None
     if request.use_hybrid:
-        try:
-            query_embedding = await embeddings_service.embed_query(request.query)
-            logger.info("Generated query embedding for hybrid search")
-        except Exception as e:
-            logger.warning(f"Failed to generate embeddings, falling back to BM25: {e}")
+        with rag_tracer.trace_embedding(trace, request.query) as embedding_span:
+            try:
+                query_embedding = await embeddings_service.embed_query(request.query)
+                logger.info("Generated query embedding for hybrid search")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to generate embeddings, falling back to BM25: {e}"
+                )
 
-    search_results = opensearch_client.search_unified(
-        query=request.query,
-        query_embedding=query_embedding,
-        size=request.top_k,
-        categories=request.categories,
-        use_hybrid=request.use_hybrid,
-    )
+            if embedding_span:
+                rag_tracer.tracer.update_span(
+                    embedding_span, output={"success": False, "error": str(e)}
+                )
 
-    chunks = []
-    arxiv_ids = []
-    sources_set = set()
-
-    for hit in search_results.get("hits", []):
-        arxiv_id = hit.get("arxiv_id", "")
-
-        chunks.append(
-            {
-                "arxiv_id": arxiv_id,
-                "chunk_text": hit.get("chunk_text", hit.get("abstract", "")),
-            }
+    with rag_tracer.trace_search(trace, request.query, request.top_k) as search_span:
+        search_results = opensearch_client.search_unified(
+            query=request.query,
+            query_embedding=query_embedding,
+            size=request.top_k,
+            categories=request.categories,
+            use_hybrid=request.use_hybrid,
         )
 
-        if arxiv_id:
-            arxiv_ids.append(arxiv_id)
-            arxiv_id_clean = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
-            sources_set.add(f"https://arxiv.org/pdf/{arxiv_id_clean}.pdf")
+        chunks = []
+        arxiv_ids = []
+        sources_set = set()
+
+        for hit in search_results.get("hits", []):
+            arxiv_id = hit.get("arxiv_id", "")
+
+            chunks.append(
+                {
+                    "arxiv_id": arxiv_id,
+                    "chunk_text": hit.get("chunk_text", hit.get("abstract", "")),
+                }
+            )
+
+            if arxiv_id:
+                arxiv_ids.append(arxiv_id)
+                arxiv_id_clean = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
+                sources_set.add(f"https://arxiv.org/pdf/{arxiv_id_clean}.pdf")
+
+        rag_tracer.end_search(
+            search_span, chunks, arxiv_ids, search_results.get("total", 0)
+        )
 
     return chunks, list(sources_set), arxiv_ids
 
