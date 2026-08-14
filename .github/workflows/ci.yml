@@ -23,8 +23,22 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --all-extras --dev
+          # If using uv.lock (recommended):
+          uv sync --frozen --all-extras --dev
 
-      - name: Run pytest
+          # If you do not have a uv.lock file yet, use this instead:
+          # uv sync --all-extras --dev
+
+      - name: Run pytest with coverage
         run: |
-          uv run pytest tests/ -v
+          uv run pytest tests/ -v \
+            --cov=. \
+            --cov-report=term \
+            --cov-report=html:coverage-html
+
+      - name: Upload Test Coverage HTML Report
+        if: always() && matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-coverage-report
+          path: coverage-html/
