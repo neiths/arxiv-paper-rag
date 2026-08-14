@@ -226,95 +226,110 @@ async def ask_question_stream(
 
     async def generate_stream():
         start_time = time.time()
+        rag_tracer = RAGTracer(langfuse_tracer)
 
-        try:
-            # Check exact cache first
-            if cache_client:
-                try:
-                    cached_response = await cache_client.find_cached_response(request)
-                    if cached_response:
-                        logger.info(
-                            "Returning cached response for exact streaming query match"
+        with rag_tracer.trace_request("api_user", request.query) as trace:
+            try:
+                # Check exact cache first
+                if cache_client:
+                    try:
+                        cached_response = await cache_client.find_cached_response(
+                            request
+                        )
+                        if cached_response:
+                            logger.info(
+                                "Returning cached response for exact streaming query match"
+                            )
+
+                            # Send metadata first (same format as non-cached)
+                            metadata_response = {
+                                "sources": cached_response.sources,
+                                "chunks_used": cached_response.chunks_used,
+                                "search_mode": cached_response.search_mode,
+                            }
+                            yield f"data: {json.dumps(metadata_response)}\n\n"
+
+                            # Stream the cached response in chunks
+                            for chunk in cached_response.answer.split():
+                                yield f"data: {json.dumps({'chunk': chunk + ' '})}\n\n"
+
+                            # Send completion signal with just the final answer
+                            yield f"data: {json.dumps({'answer': cached_response.answer, 'done': True})}\n\n"
+                            return
+                    except Exception as e:
+                        logger.warning(
+                            f"Cache check failed, proceeding with normal flow: {e}"
                         )
 
-                        # Send metadata first (same format as non-cached)
-                        metadata_response = {
-                            "sources": cached_response.sources,
-                            "chunks_used": cached_response.chunks_used,
-                            "search_mode": cached_response.search_mode,
-                        }
-                        yield f"data: {json.dumps(metadata_response)}\n\n"
+                # Retrieve chunks
+                chunks, sources, _ = await _prepare_chunks_and_sources(
+                    request,
+                    opensearch_client,
+                    embeddings_service,
+                )
 
-                        # Stream the cached response in chunks
-                        for chunk in cached_response.answer.split():
-                            yield f"data: {json.dumps({'chunk': chunk + ' '})}\n\n"
+                if not chunks:
+                    yield f"data: {json.dumps({'answer': 'No relevant information found.', 'sources': [], 'done': True})}\n\n"
+                    return
 
-                        # Send completion signal with just the final answer
-                        yield f"data: {json.dumps({'answer': cached_response.answer, 'done': True})}\n\n"
-                        return
-                except Exception as e:
-                    logger.warning(
-                        f"Cache check failed, proceeding with normal flow: {e}"
+                # Send metadata first
+                search_mode = "bm25" if not request.use_hybrid else "hybrid"
+                metadata_response = {
+                    "sources": sources,
+                    "chunks_used": len(chunks),
+                    "search_mode": search_mode,
+                }
+                yield f"data: {json.dumps(metadata_response)}\n\n"
+
+                # Build prompt
+                with rag_tracer.trace_prompt_construction(trace, chunks) as prompt_span:
+                    from src.services.ollama.prompts import RAGPromptBuilder
+
+                    prompt_builder = RAGPromptBuilder()
+                    final_prompt = prompt_builder.create_rag_prompt(
+                        request.query, chunks
                     )
+                    rag_tracer.end_prompt(prompt_span, final_prompt)
 
-            # Retrieve chunks
-            chunks, sources, _ = await _prepare_chunks_and_sources(
-                request,
-                opensearch_client,
-                embeddings_service,
-            )
+                # Stream generation
+                with rag_tracer.trace_generation(
+                    trace, request.model, final_prompt
+                ) as gen_span:
+                    full_response = ""
+                    async for chunk in ollama_client.generate_rag_answer_stream(
+                        query=request.query, chunks=chunks, model=request.model
+                    ):
+                        if chunk.get("response"):
+                            text_chunk = chunk["response"]
+                            full_response += text_chunk
+                            yield f"data: {json.dumps({'chunk': text_chunk})}\n\n"
 
-            if not chunks:
-                yield f"data: {json.dumps({'answer': 'No relevant information found.', 'sources': [], 'done': True})}\n\n"
-                return
+                        if chunk.get("done", False):
+                            yield f"data: {json.dumps({'answer': full_response, 'done': True})}\n\n"
+                            break
 
-            # Send metadata first
-            search_mode = "bm25" if not request.use_hybrid else "hybrid"
-            metadata_response = {
-                "sources": sources,
-                "chunks_used": len(chunks),
-                "search_mode": search_mode,
-            }
-            yield f"data: {json.dumps(metadata_response)}\n\n"
+                rag_tracer.end_request(trace, full_response, time.time() - start_time)
 
-            # Build prompt
-            from src.services.ollama.prompts import RAGPromptBuilder
+                # Store response in exact match cache
+                if cache_client and full_response:
+                    try:
+                        search_mode = "bm25" if not request.use_hybrid else "hybrid"
+                        response_to_cache = AskResponse(
+                            query=request.query,
+                            answer=full_response,
+                            sources=sources,
+                            chunks_used=len(chunks),
+                            search_mode=search_mode,
+                        )
+                        await cache_client.store_response(request, response_to_cache)
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to store streaming response in cache: {e}"
+                        )
 
-            prompt_builder = RAGPromptBuilder()
-            final_prompt = prompt_builder.create_rag_prompt(request.query, chunks)
-
-            # Stream generation
-            full_response = ""
-            async for chunk in ollama_client.generate_rag_answer_stream(
-                query=request.query, chunks=chunks, model=request.model
-            ):
-                if chunk.get("response"):
-                    text_chunk = chunk["response"]
-                    full_response += text_chunk
-                    yield f"data: {json.dumps({'chunk': text_chunk})}\n\n"
-
-                if chunk.get("done", False):
-                    yield f"data: {json.dumps({'answer': full_response, 'done': True})}\n\n"
-                    break
-
-            # Store response in exact match cache
-            if cache_client and full_response:
-                try:
-                    search_mode = "bm25" if not request.use_hybrid else "hybrid"
-                    response_to_cache = AskResponse(
-                        query=request.query,
-                        answer=full_response,
-                        sources=sources,
-                        chunks_used=len(chunks),
-                        search_mode=search_mode,
-                    )
-                    await cache_client.store_response(request, response_to_cache)
-                except Exception as e:
-                    logger.warning(f"Failed to store streaming response in cache: {e}")
-
-        except Exception as e:
-            logger.error(f"Streaming error: {e}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            except Exception as e:
+                logger.error(f"Streaming error: {e}")
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(
         generate_stream(),
