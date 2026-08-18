@@ -29,7 +29,39 @@ jobs:
           # If you do not have a uv.lock file yet, use this instead:
           # uv sync --all-extras --dev
 
+      - name: Start Docker Compose services
+        run: |
+          docker compose up -d postgres redis opensearch
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for PostgreSQL, Redis, and OpenSearch to be healthy..."
+          for i in {1..30}; do
+            POSTGRES_STATUS=$(docker inspect --format='{{.State.Health.Status}}' rag-postgres 2>/dev/null || echo "unknown")
+            REDIS_STATUS=$(docker inspect --format='{{.State.Health.Status}}' rag-redis 2>/dev/null || echo "unknown")
+            OPENSEARCH_STATUS=$(docker inspect --format='{{.State.Health.Status}}' rag-opensearch 2>/dev/null || echo "unknown")
+
+            echo "Status - Postgres: $POSTGRES_STATUS, Redis: $REDIS_STATUS, OpenSearch: $OPENSEARCH_STATUS"
+
+            if [ "$POSTGRES_STATUS" = "healthy" ] && \
+               [ "$REDIS_STATUS" = "healthy" ] && \
+               [ "$OPENSEARCH_STATUS" = "healthy" ]; then
+              echo "All services are healthy!"
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 5
+          done
+          echo "Timeout waiting for services to be healthy"
+          docker compose ps
+          docker compose logs
+          exit 1
+
       - name: Run pytest with coverage
+        env:
+          POSTGRES_DATABASE_URL: "postgresql+psycopg2://rag_user:rag_password@localhost:5432/rag_db"
+          OPENSEARCH__HOST: "http://localhost:9200"
+          REDIS__HOST: "localhost"
         run: |
           uv run pytest tests/ -v \
             --cov=. \
@@ -37,7 +69,7 @@ jobs:
             --cov-report=html:coverage-html
 
       - name: Upload Test Coverage HTML Report
-        if: always() && matrix.python-version == '3.12'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: html-coverage-report
