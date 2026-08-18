@@ -85,6 +85,45 @@ class LangfuseTracer:
             return None
 
     @contextmanager
+    def trace_rag_request(
+        self,
+        query: str,
+        user_id: str,
+        session_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ):
+        """
+        Context manager for tracing a RAG request.
+
+        This creates a top-level trace for the entire RAG operation.
+
+        Args:
+            query: The user query being processed
+            user_id: User identifier
+            session_id: Optional session identifier
+            metadata: Additional metadata to attach to the trace
+
+        Yields:
+            Trace context object for updates
+        """
+        if not self.client:
+            # No-op context when Langfuse is disabled
+            yield None
+            return
+
+        try:
+            trace = self.client.trace(
+                name="rag_request",
+                user_id=user_id,
+                session_id=session_id or f"session_{user_id}",
+                metadata=metadata or {"query": query},
+            )
+            yield trace
+        except Exception as e:
+            logger.error(f"Error creating RAG request trace: {e}")
+            yield None
+
+    @contextmanager
     def trace_langgraph_agent(
         self,
         name: str,
