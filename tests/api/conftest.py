@@ -18,10 +18,10 @@ async def client():
     # Mock database startup and session to prevent real connections
     with (
         patch(
-            "src.db.interfaces.postgresql.PostgreSQLDatabase.startup"
+            "src.db.interfaces.postgresql.PostgreSQLDataBase.startup"
         ) as mock_startup,
         patch(
-            "src.db.interfaces.postgresql.PostgreSQLDatabase.get_session"
+            "src.db.interfaces.postgresql.PostgreSQLDataBase.get_session"
         ) as mock_get_session,
         patch("src.services.opensearch.factory.make_opensearch_client") as mock_os,
         patch("src.services.arxiv.factory.make_arxiv_client") as mock_arxiv,
