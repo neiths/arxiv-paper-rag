@@ -6,13 +6,14 @@ import uvicorn
 from fastapi import FastAPI
 from src.config import get_settings
 from src.db.factory import make_database
+from src.middlewares import BearerTokenAuthMiddleware, RequestLoggingMiddleware
 from src.routers import hybrid_search, ollama, ping
 from src.routers.ask import ask_router, stream_router
 from src.services.arxiv.factory import make_arxiv_client
 from src.services.cache.factory import make_cache_client
 from src.services.embeddings.factory import make_embeddings_service
-from src.services.ollama.factory import make_ollama_client
 from src.services.langfuse.factory import make_langfuse_tracer
+from src.services.ollama.factory import make_ollama_client
 from src.services.opensearch.factory import make_opensearch_client
 from src.services.pdf_parser.factory import make_pdf_parser_service
 
@@ -84,12 +85,23 @@ async def lifespan(app: FastAPI):
     logger.info("API shutdown complete")
 
 
+app_settings = get_settings()
+
 app = FastAPI(
     title="arXiv Paper Curator API",
     description="Personal arXiv CS.AI paper curator with RAG capabilities",
     version=os.getenv("APP_VERSION", "0.1.0"),
     lifespan=lifespan,
 )
+
+# Register middlewares (executed in reverse order: RequestLoggingMiddleware wraps BearerTokenAuthMiddleware)
+app.add_middleware(
+    BearerTokenAuthMiddleware,
+    enabled=app_settings.auth.enabled,
+    secret_token=app_settings.auth.secret_token,
+    excluded_paths={"/docs", "/redoc", "/openapi.json", "/api/v1/ping"},
+)
+app.add_middleware(RequestLoggingMiddleware)
 
 # Include routers
 app.include_router(ping.router, prefix="/api/v1")  # Health check endpoint

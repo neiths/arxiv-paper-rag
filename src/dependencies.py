@@ -1,6 +1,6 @@
-from functools import lru_cache
-from typing import TYPE_CHECKING, Annotated, Optional
 from collections.abc import Generator
+from functools import lru_cache
+from typing import TYPE_CHECKING, Annotated
 
 if TYPE_CHECKING:
     from fastapi import Depends, Request
@@ -17,10 +17,10 @@ from src.db.interfaces.base import BaseDataBaseInterface
 from src.services.arxiv.client import ArxivClient
 from src.services.cache.client import CacheClient
 from src.services.embeddings.jina_client import JinaEmbeddingsClient
+from src.services.langfuse.client import LangfuseTracer
 from src.services.ollama.client import OllamaClient
 from src.services.opensearch.client import OpenSearchClient
 from src.services.pdf_parser.parser import PDFParserService
-from src.services.langfuse.client import LangfuseTracer
 
 
 @lru_cache
@@ -82,6 +82,11 @@ def get_langfuse_tracer(request: Request) -> LangfuseTracer:
     return request.app.state.langfuse_tracer
 
 
+def get_current_user(request: Request) -> dict | None:
+    """Get authenticated user data from request state populated by BearerTokenAuthMiddleware."""
+    return getattr(request.state, "user", None)
+
+
 # Dependency annotations
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 DatabaseDep = Annotated[BaseDataBaseInterface, Depends(get_database)]
@@ -93,3 +98,4 @@ EmbeddingsDep = Annotated[JinaEmbeddingsClient, Depends(get_embeddings_service)]
 OllamaDep = Annotated[OllamaClient, Depends(get_ollama_client)]
 CacheDep = Annotated[CacheClient, Depends(get_cache_client)]
 LangfuseDep = Annotated[LangfuseTracer, Depends(get_langfuse_tracer)]
+AuthenticatedUserDep = Annotated[dict | None, Depends(get_current_user)]

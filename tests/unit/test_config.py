@@ -1,6 +1,5 @@
 import os
 
-import pytest
 from src.config import Settings
 
 
@@ -39,10 +38,22 @@ def test_settings_ollama_defaults():
     """Test Ollama default configuration."""
     settings = Settings()
 
-    # In Docker environment, this should be ollama service host
     expected_host = (
         "http://ollama:11434"
         if "OLLAMA_HOST" not in os.environ
         else settings.ollama_host
     )
-    assert settings.ollama_host in ["http://localhost:11434", "http://ollama:11434"]
+    assert settings.ollama_host in [
+        "http://localhost:11434",
+        "http://ollama:11434",
+        expected_host,
+    ]
+
+
+def test_settings_auth_defaults():
+    """Test Auth default configuration."""
+    settings = Settings()
+
+    assert settings.auth.enabled is False
+    assert settings.auth.secret_token == ""
+    assert settings.auth.jwt_algorithm == "HS256"
