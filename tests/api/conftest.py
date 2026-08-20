@@ -23,10 +23,11 @@ async def client():
         patch(
             "src.db.interfaces.postgresql.PostgreSQLDataBase.get_session"
         ) as mock_get_session,
-        patch("src.services.opensearch.factory.make_opensearch_client") as mock_os,
-        patch("src.services.arxiv.factory.make_arxiv_client") as mock_arxiv,
-        patch("src.services.pdf_parser.factory.make_pdf_parser_service") as mock_pdf,
-        patch("src.services.ollama.client.OllamaClient") as mock_ollama,
+        patch("src.main.make_opensearch_client") as mock_os,
+        patch("src.main.make_arxiv_client") as mock_arxiv,
+        patch("src.main.make_pdf_parser_service") as mock_pdf,
+        patch("src.main.make_ollama_client") as mock_ollama,
+        patch("src.main.make_cache_client") as mock_cache,
         patch(
             "src.repositories.paper.PaperRepository.get_by_arxiv_id"
         ) as mock_get_by_id,
@@ -43,10 +44,15 @@ async def client():
         mock_get_by_id.return_value = None
 
         # Set up other mock return values
-        mock_os.return_value = AsyncMock()
-        mock_arxiv.return_value = AsyncMock()
-        mock_pdf.return_value = AsyncMock()
+        mock_os_instance = MagicMock()
+        mock_os_instance.health_check.return_value = True
+        mock_os_instance.setup_indices.return_value = {"hybrid_index": True}
+        mock_os_instance.client.count.return_value = {"count": 10}
+        mock_os.return_value = mock_os_instance
+        mock_arxiv.return_value = MagicMock()
+        mock_pdf.return_value = MagicMock()
         mock_ollama.return_value = AsyncMock()
+        mock_cache.return_value = MagicMock()
 
         async with LifespanManager(app) as manager:
             async with AsyncClient(

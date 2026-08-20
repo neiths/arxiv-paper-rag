@@ -161,6 +161,21 @@ class TelegramSettings(BaseConfigSettings):
     enabled: bool = False
 
 
+class AuthSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="AUTH__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    enabled: bool = False
+    secret_token: str = ""
+    jwt_secret_key: str = ""
+    jwt_algorithm: str = "HS256"
+
+
 class Settings(BaseConfigSettings):
     app_version: str = "0.1.0"
     debug: bool = True
@@ -181,6 +196,7 @@ class Settings(BaseConfigSettings):
     # Jina AI embeddings configuration
     jina_api_key: str = ""
 
+    auth: AuthSettings = Field(default_factory=AuthSettings)
     arxiv: ArxivSettings = Field(default_factory=ArxivSettings)
     pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
     chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
