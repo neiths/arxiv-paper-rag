@@ -1,6 +1,6 @@
 import logging
 from contextlib import contextmanager
-from typing import Any, Dict, Optional
+from typing import Any
 
 from langfuse import Langfuse
 from src.config import Settings
@@ -40,25 +40,11 @@ class LangfuseTracer:
         else:
             logger.info("Langfuse tracing disabled or missing credentials")
 
-    def get_callback_handler(
-        self,
-        trace_name: str | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
-        metadata: dict[str, Any] | None = None,
-        tags: list[str] | None = None,
-    ):
+    def get_callback_handler(self):
         """
         Get a CallbackHandler for LangChain/LangGraph integration.
 
-        This is the v3 recommended approach - all LLM calls are automatically traced.
-
-        Args:
-            trace_name: Optional name for the trace
-            user_id: Optional user identifier
-            session_id: Optional session identifier
-            metadata: Additional metadata to attach to the trace
-            tags: Optional tags for the trace
+        This is the v3/v4 recommended approach - all LLM calls are automatically traced.
 
         Returns:
             CallbackHandler instance if Langfuse is enabled, None otherwise
@@ -67,22 +53,66 @@ class LangfuseTracer:
             return None
 
         try:
-            # Import v3 CallbackHandler (new path)
             from langfuse.langchain import CallbackHandler
 
-            # Create handler with trace metadata
-            # Note: flush settings are now on the client, not the handler
-            handler = CallbackHandler(
-                trace_name=trace_name,
-                user_id=user_id,
-                session_id=session_id,
-                metadata=metadata,
-                tags=tags,
-            )
-            return handler
+            return CallbackHandler(public_key=self.settings.public_key)
         except Exception as e:
             logger.error(f"Error creating CallbackHandler: {e}")
             return None
+
+    @contextmanager
+    def trace_rag_request(
+        self,
+        query: str,
+        user_id: str,
+        session_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+    ):
+        """
+        Context manager for tracing a RAG request in Langfuse v3/v4.
+
+        Creates a top-level span and propagates trace attributes (user_id, session_id,
+        metadata, tags) into the OpenTelemetry context so child spans/generations link properly.
+
+        Args:
+            query: The user query being processed
+            user_id: User identifier
+            session_id: Optional session identifier
+            metadata: Additional metadata to attach to the trace
+            tags: Optional tags for the trace
+
+        Yields:
+            LangfuseSpan or None: Root observation context object for updates
+        """
+        if not self.client:
+            yield None
+            return
+
+        session = session_id or f"session_{user_id}"
+        meta = metadata or {"query": query}
+
+        try:
+            from langfuse import propagate_attributes
+
+            with (
+                self.client.start_as_current_observation(
+                    name="rag_request",
+                    as_type="span",
+                    input={"query": query},
+                    metadata=meta,
+                ) as span,
+                propagate_attributes(
+                    user_id=user_id,
+                    session_id=session,
+                    metadata=meta,
+                    tags=tags,
+                ),
+            ):
+                yield span
+        except Exception as e:
+            logger.error(f"Error creating RAG request trace: {e}")
+            yield None
 
     @contextmanager
     def trace_langgraph_agent(
@@ -96,13 +126,11 @@ class LangfuseTracer:
         """
         Context manager to wrap LangGraph agent execution with a top-level trace span.
 
-        This follows the Langfuse LangGraph cookbook pattern of wrapping the entire
-        graph invocation in a span for better observability.
-
         Usage:
             with tracer.trace_langgraph_agent(name="agentic_rag", ...) as (trace_ctx, handler):
                 result = graph.invoke(input, config={"callbacks": [handler]})
-                trace_ctx.update(output=result)
+                if trace_ctx:
+                    tracer.update_span(trace_ctx, output=result)
 
         Args:
             name: Name for the trace span (e.g., "agentic_rag_graph")
@@ -115,34 +143,38 @@ class LangfuseTracer:
             Tuple of (trace_context, callback_handler) for graph execution
         """
         if not self.client:
-            # Return no-op context if Langfuse is disabled
             yield (None, None)
             return
 
-        # Create callback handler for LangChain/LangGraph integration
-        # The handler will automatically create traces
-        handler = self.get_callback_handler(
-            trace_name=name,
-            user_id=user_id,
-            session_id=session_id,
-            metadata=metadata,
-            tags=tags,
-        )
+        try:
+            from langfuse import propagate_attributes
 
-        # In Langfuse v3, the CallbackHandler manages tracing automatically
-        # We just need to return the handler and a placeholder trace context
-        # The actual trace will be created by the handler
-        yield (None, handler)
+            handler = self.get_callback_handler()
+            with (
+                self.client.start_as_current_observation(
+                    name=name,
+                    as_type="agent",
+                    metadata=metadata or {},
+                ) as span,
+                propagate_attributes(
+                    user_id=user_id,
+                    session_id=session_id,
+                    metadata=metadata,
+                    tags=tags,
+                    trace_name=name,
+                ),
+            ):
+                yield (span, handler)
+        except Exception as e:
+            logger.error(f"Error creating LangGraph agent trace: {e}")
+            yield (None, None)
 
     def get_trace_id(self, trace=None) -> str | None:
         """
         Get the current trace ID from Langfuse context.
 
-        In Langfuse v3, the CallbackHandler manages traces automatically.
-        We can get the current trace ID using get_current_trace_id().
-
         Args:
-            trace: Deprecated, not used in v3
+            trace: Optional span or observation object with trace_id attribute
 
         Returns:
             Trace ID string or None if trace is disabled
@@ -150,10 +182,11 @@ class LangfuseTracer:
         if not self.client:
             return None
 
+        if trace and hasattr(trace, "trace_id"):
+            return trace.trace_id
+
         try:
-            # In Langfuse v3, use get_current_trace_id()
-            trace_id = self.client.get_current_trace_id()
-            return trace_id
+            return self.client.get_current_trace_id()
         except Exception as e:
             logger.error(f"Error getting trace ID: {e}")
             return None
@@ -166,10 +199,10 @@ class LangfuseTracer:
         comment: str | None = None,
     ) -> bool:
         """
-        Submit user feedback for a trace (following Langfuse cookbook pattern).
+        Submit user feedback for a trace.
 
         Args:
-            trace_id: Trace ID from get_trace_id()
+            trace_id: Trace ID
             score: Feedback score (0-1 or -1 to 1)
             name: Name of the score (default: "user-feedback")
             comment: Optional feedback comment
@@ -182,7 +215,7 @@ class LangfuseTracer:
             return False
 
         try:
-            self.client.score(
+            self.client.create_score(
                 trace_id=trace_id,
                 name=name,
                 value=score,
@@ -218,44 +251,40 @@ class LangfuseTracer:
         model: str,
         input_data: Any,
         metadata: dict[str, Any] | None = None,
+        model_parameters: dict[str, Any] | None = None,
     ):
         """
-        Start a generation span for LLM calls (following Langfuse cookbook pattern).
-
-        This creates a generation observation that tracks:
-        - Model name and parameters
-        - Input prompt/messages
-        - Output completion
-        - Token usage
-        - Latency
+        Start a generation span for LLM calls.
 
         Usage:
             with tracer.start_generation(name="decision_llm", model="llama3.2", input_data=prompt) as gen:
                 response = await llm.generate(...)
-                gen.update(output=response, usage_metadata={...})
+                tracer.update_generation(gen, output=response, usage_metadata={...})
 
         Args:
             name: Name for this generation (e.g., "decision_llm", "grading_llm")
             model: Model identifier (e.g., "llama3.2:1b", "gpt-4o")
             input_data: Input to the LLM (prompt or messages)
             metadata: Additional metadata (temperature, max_tokens, etc.)
+            model_parameters: Optional dict of model parameters
 
         Yields:
-            Generation context object for updates
+            Generation observation context object for updates
         """
         if not self.client:
-            # No-op context when disabled
             yield None
             return
 
         try:
-            generation = self.client.generation(
+            with self.client.start_as_current_observation(
                 name=name,
+                as_type="generation",
                 model=model,
                 input=input_data,
                 metadata=metadata or {},
-            )
-            yield generation
+                model_parameters=model_parameters,
+            ) as generation:
+                yield generation
         except Exception as e:
             logger.error(f"Error creating generation span: {e}")
             yield None
@@ -268,18 +297,12 @@ class LangfuseTracer:
         metadata: dict[str, Any] | None = None,
     ):
         """
-        Start a generic span for non-LLM operations (following Langfuse cookbook pattern).
-
-        Use this for operations like:
-        - Document retrieval
-        - Query rewriting logic
-        - Document grading logic
-        - Any other processing step
+        Start a generic span for non-LLM operations.
 
         Usage:
             with tracer.start_span(name="retrieve_papers", input_data={"query": q}) as span:
                 docs = retrieve(...)
-                span.update(output={"docs_count": len(docs)})
+                tracer.update_span(span, output={"docs_count": len(docs)})
 
         Args:
             name: Name for this span (e.g., "retrieve_papers", "grade_documents")
@@ -287,20 +310,20 @@ class LangfuseTracer:
             metadata: Additional metadata
 
         Yields:
-            Span context object for updates
+            Span observation context object for updates
         """
         if not self.client:
-            # No-op context when disabled
             yield None
             return
 
         try:
-            span = self.client.span(
+            with self.client.start_as_current_observation(
                 name=name,
+                as_type="span",
                 input=input_data,
                 metadata=metadata or {},
-            )
-            yield span
+            ) as span:
+                yield span
         except Exception as e:
             logger.error(f"Error creating span: {e}")
             yield None
@@ -329,24 +352,25 @@ class LangfuseTracer:
             return
 
         try:
-            update_data = {"output": output}
+            update_data: dict[str, Any] = {"output": output}
 
             if usage_metadata:
-                # Add usage metadata following Langfuse format
+                usage_details = {}
                 if "prompt_tokens" in usage_metadata:
-                    update_data["usage"] = {
-                        "input": usage_metadata.get("prompt_tokens", 0),
-                        "output": usage_metadata.get("completion_tokens", 0),
-                        "total": usage_metadata.get("total_tokens", 0),
+                    usage_details["input"] = usage_metadata.get("prompt_tokens", 0)
+                if "completion_tokens" in usage_metadata:
+                    usage_details["output"] = usage_metadata.get("completion_tokens", 0)
+                if "total_tokens" in usage_metadata:
+                    usage_details["total"] = usage_metadata.get("total_tokens", 0)
+                if usage_details:
+                    update_data["usage_details"] = usage_details
+
+                if "latency_ms" in usage_metadata:
+                    update_data["metadata"] = {
+                        "latency_ms": usage_metadata["latency_ms"]
                     }
 
-                # Add timing metadata
-                if "latency_ms" in usage_metadata:
-                    update_data["metadata"] = update_data.get("metadata", {})
-                    update_data["metadata"]["latency_ms"] = usage_metadata["latency_ms"]
-
             generation.update(**update_data)
-            generation.end()
         except Exception as e:
             logger.error(f"Error updating generation: {e}")
 
@@ -365,14 +389,14 @@ class LangfuseTracer:
             span: Span object from start_span()
             output: Operation output
             metadata: Additional metadata to attach
-            level: Log level (e.g., "ERROR", "WARNING") for error tracking
+            level: Log level (e.g., "ERROR", "WARNING", "DEFAULT", "DEBUG") for error tracking
             status_message: Status or error message
         """
         if not span:
             return
 
         try:
-            update_data = {}
+            update_data: dict[str, Any] = {}
             if output is not None:
                 update_data["output"] = output
             if metadata:
@@ -384,6 +408,5 @@ class LangfuseTracer:
 
             if update_data:
                 span.update(**update_data)
-            span.end()
         except Exception as e:
             logger.error(f"Error updating span: {e}")

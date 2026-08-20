@@ -48,10 +48,10 @@ async def _prepare_chunks_and_sources(
                     f"Failed to generate embeddings, falling back to BM25: {e}"
                 )
 
-            if embedding_span:
-                rag_tracer.tracer.update_span(
-                    embedding_span, output={"success": False, "error": str(e)}
-                )
+                if embedding_span:
+                    rag_tracer.tracer.update_span(
+                        embedding_span, output={"success": False, "error": str(e)}
+                    )
 
     with rag_tracer.trace_search(trace, request.query, request.top_k) as search_span:
         search_results = opensearch_client.search_unified(
@@ -133,9 +133,7 @@ async def ask_question(
 
             # Retrieve chunks
             chunks, sources, _ = await _prepare_chunks_and_sources(
-                request,
-                opensearch_client,
-                embeddings_service,
+                request, opensearch_client, embeddings_service, rag_tracer, trace
             )
 
             if not chunks:

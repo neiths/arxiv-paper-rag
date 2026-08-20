@@ -1,8 +1,5 @@
-"""Simple, efficient Langfuse tracing utility for RAG pipeline."""
-
 import time
-from contextlib import contextmanager
-from typing import Any, Dict, List, Optional
+from contextlib import contextmanager, suppress
 
 from .client import LangfuseTracer
 
@@ -33,38 +30,31 @@ class RAGTracer:
     def trace_embedding(self, trace, query: str):
         """Query embedding operation with timing."""
         start_time = time.time()
-        span = self.tracer.create_span(
-            trace=trace,
+        with self.tracer.start_span(
             name="query_embedding",
             input_data={"query": query, "query_length": len(query)},
-        )
-        try:
-            yield span
-        finally:
-            duration = time.time() - start_time
-            if span:
-                self.tracer.update_span(
-                    span=span,
-                    output={
-                        "embedding_duration_ms": round(duration * 1000, 2),
-                        "success": True,
-                    },
-                )
-                span.end()
+        ) as span:
+            try:
+                yield span
+            finally:
+                duration = time.time() - start_time
+                if span:
+                    self.tracer.update_span(
+                        span=span,
+                        output={
+                            "embedding_duration_ms": round(duration * 1000, 2),
+                            "success": True,
+                        },
+                    )
 
     @contextmanager
     def trace_search(self, trace, query: str, top_k: int):
         """Search operation with timing."""
-        span = self.tracer.create_span(
-            trace=trace,
+        with self.tracer.start_span(
             name="search_retrieval",
             input_data={"query": query, "top_k": top_k},
-        )
-        try:
+        ) as span:
             yield span
-        finally:
-            if span:
-                span.end()
 
     def end_search(
         self, span, chunks: list[dict], arxiv_ids: list[str], total_hits: int
@@ -86,16 +76,11 @@ class RAGTracer:
     @contextmanager
     def trace_prompt_construction(self, trace, chunks: list[dict]):
         """Prompt building with timing."""
-        span = self.tracer.create_span(
-            trace=trace,
+        with self.tracer.start_span(
             name="prompt_construction",
             input_data={"chunk_count": len(chunks)},
-        )
-        try:
+        ) as span:
             yield span
-        finally:
-            if span:
-                span.end()
 
     def end_prompt(self, span, prompt: str):
         """End prompt span with final prompt."""
@@ -114,16 +99,12 @@ class RAGTracer:
     @contextmanager
     def trace_generation(self, trace, model: str, prompt: str):
         """LLM generation with timing."""
-        span = self.tracer.create_span(
-            trace=trace,
+        with self.tracer.start_generation(
             name="llm_generation",
+            model=model,
             input_data={"model": model, "prompt_length": len(prompt), "prompt": prompt},
-        )
-        try:
+        ) as span:
             yield span
-        finally:
-            if span:
-                span.end()
 
     def end_generation(self, span, response: str, model: str):
         """End generation span with response."""
@@ -144,14 +125,12 @@ class RAGTracer:
         if not trace:
             return
 
-        try:
-            trace.update(
+        with suppress(Exception):
+            self.tracer.update_span(
+                span=trace,
                 output={
                     "answer": response,
                     "total_duration_seconds": round(total_duration, 3),
                     "response_length": len(response),
-                }
+                },
             )
-        except Exception:
-            # Silently fail - don't break the request for tracing issues
-            pass
