@@ -1,6 +1,7 @@
 services:
   # API service
   api:
+    profiles: ["apis"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -20,17 +21,17 @@ services:
     env_file:
       - .env
     environment:
-      - WORKERS=${API_WORKERS:-4} # Configurable workers (default: 4)
+      - WORKERS=${API_WORKERS:-4}
       - OPENSEARCH__HOST=http://opensearch:9200
       - OLLAMA_HOST=http://ollama:11434
       - REDIS__HOST=redis
       - POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db
-    # Health check is defined in Dockerfile
     restart: unless-stopped
     networks:
       - rag-network
 
   redis:
+    profiles: ["apis"]
     image: redis:7-alpine
     container_name: rag-redis
     ports:
@@ -49,6 +50,7 @@ services:
       - rag-network
 
   opensearch:
+    profiles: ["airflow", "apis", "agent"]
     image: opensearchproject/opensearch:2.19.0
     container_name: rag-opensearch
     environment:
@@ -77,6 +79,7 @@ services:
       - rag-network
 
   opensearch-dashboards:
+    profiles: ["airflow", "apis", "agent"]
     image: opensearchproject/opensearch-dashboards:2.19.0
     container_name: rag-dashboards
     ports:
@@ -99,6 +102,7 @@ services:
 
   # Ollama service
   ollama:
+    profiles: ["agent", "apis"]
     image: ollama/ollama:0.11.2
     container_name: rag-ollama
     ports:
@@ -116,6 +120,7 @@ services:
 
   # PostgreSQL service
   postgres:
+    profiles: ["airflow", "apis"]
     image: postgres:16-alpine
     container_name: rag-postgres
     environment:
@@ -144,6 +149,7 @@ services:
 
   # Adminer service for PostgreSQL management
   adminer:
+    profiles: ["airflow"]
     image: adminer:latest
     container_name: rag-adminer
     ports:
@@ -160,11 +166,11 @@ services:
 
   # Airflow service
   airflow:
+    profiles: ["airflow"]
     build:
       context: ./airflow
       dockerfile: Dockerfile
     container_name: rag-airflow
-    # user: "50000:0"  # Uncomment for WSL/Ubuntu, comment out for Mac
     depends_on:
       postgres:
         condition: service_healthy
@@ -173,13 +179,11 @@ services:
     env_file:
       - .env
     environment:
-      # Airflow-specific environment setup
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=true
       - AIRFLOW_HOME=/opt/airflow
-      # Container hostnames for Airflow
       - POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db
       - OPENSEARCH__HOST=http://opensearch:9200
       - PYTHONPATH=/opt/airflow
@@ -191,7 +195,6 @@ services:
       - ./src:/opt/airflow/src
     ports:
       - "8081:8080"
-    # Command handled by entrypoint.sh
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -203,6 +206,7 @@ services:
 
   # ClickHouse for Langfuse analytics
   clickhouse:
+    profiles: ["apis", "agent", "langfuse"]
     image: clickhouse/clickhouse-server:24.8-alpine
     container_name: rag-clickhouse
     environment:
@@ -223,6 +227,7 @@ services:
       - rag-network
 
   langfuse-worker:
+    profiles: ["apis", "agent", "langfuse"]
     image: docker.io/langfuse/langfuse-worker:3
     container_name: rag-langfuse-worker
     restart: unless-stopped
@@ -240,7 +245,6 @@ services:
     environment:
       NEXTAUTH_URL: http://localhost:3001
       DATABASE_URL: postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
-      # Security: Load sensitive values from .env file
       SALT: ${LANGFUSE_SALT}
       ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
       TELEMETRY_ENABLED: "false"
@@ -273,6 +277,7 @@ services:
       - rag-network
 
   langfuse-web:
+    profiles: ["apis", "agent", "langfuse"]
     image: docker.io/langfuse/langfuse:3
     container_name: rag-langfuse-web
     restart: unless-stopped
@@ -289,7 +294,6 @@ services:
       - "3001:3000"
     environment:
       NEXTAUTH_URL: http://localhost:3001
-      # Security: Load sensitive values from .env file
       NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
       DATABASE_URL: postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
       SALT: ${LANGFUSE_SALT}
@@ -340,6 +344,7 @@ services:
       - rag-network
 
   langfuse-postgres:
+    profiles: ["apis", "agent", "langfuse"]
     image: postgres:17
     container_name: rag-langfuse-postgres
     restart: unless-stopped
@@ -364,6 +369,7 @@ services:
       - rag-network
 
   langfuse-redis:
+    profiles: ["apis", "agent", "langfuse"]
     image: docker.io/redis:7
     container_name: rag-langfuse-redis
     restart: unless-stopped
@@ -379,6 +385,7 @@ services:
       - rag-network
 
   langfuse-minio:
+    profiles: ["apis", "agent", "langfuse"]
     image: docker.io/minio/minio
     container_name: rag-langfuse-minio
     restart: unless-stopped
