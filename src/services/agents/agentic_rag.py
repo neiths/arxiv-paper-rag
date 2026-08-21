@@ -15,13 +15,7 @@ from src.services.opensearch.client import OpenSearchClient
 from .config import GraphConfig
 from .context import Context
 from .nodes import (
-    ainvoke_generate_answer_step,
-    ainvoke_grade_documents_step,
-    ainvoke_guardrail_step,
-    ainvoke_out_of_scope_step,
-    ainvoke_retrieve_step,
     ainvoke_rewrite_query_step,
-    continue_after_guardrail,
 )
 from .state import AgentState
 from .tools import create_retriever_tool
@@ -81,6 +75,13 @@ class AgenticRAGService:
 
         # Create workflow with AgentState and Context schema
         workflow = StateGraph(AgentState, context_schema=Context)
+
+        # Add nodes
+        workflow.add_node("rewrite_query", ainvoke_rewrite_query_step)
+
+        # Define graph layout
+        workflow.add_edge(START, "rewrite_query")
+        workflow.add_edge("rewrite_query", END)
 
         # Compile graph
         logger.info("Compiling LangGraph workflow")
