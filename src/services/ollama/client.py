@@ -21,6 +21,21 @@ class OllamaClient:
         self.prompt_builder = RAGPromptBuilder()
         self.response_parser = ResponseParser()
 
+    def get_langchain_model(self, model: str, temperature: float = 0.0):
+        """Get a LangChain ChatOllama model instance.
+
+        :param model: Model name
+        :param temperature: Temperature for generation
+        :returns: ChatOllama instance
+        """
+        from langchain_ollama import ChatOllama
+
+        return ChatOllama(
+            base_url=self.base_url,
+            model=model,
+            temperature=temperature,
+        )
+
     async def health_check(self) -> dict[str, Any]:
         """
         Check if Ollama service is healthy and responding.
