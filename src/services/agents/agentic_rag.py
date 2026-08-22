@@ -32,6 +32,17 @@ def route_after_grading(state: AgentState) -> str:
     return "rewrite_query"
 
 
+def route_after_retrieve(state: AgentState) -> str:
+    """Route to tools or END based on whether retrieve node generated a tool call."""
+    messages = state["messages"]
+    if not messages:
+        return END
+    last_message = messages[-1]
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        return "tools"
+    return END
+
+
 class AgenticRAGService:
     """
     Agentic RAG service
@@ -104,7 +115,14 @@ class AgenticRAGService:
         # Define graph layout
         workflow.add_edge(START, "rewrite_query")
         workflow.add_edge("rewrite_query", "retrieve")
-        workflow.add_edge("retrieve", "tools")
+        workflow.add_conditional_edges(
+            "retrieve",
+            route_after_retrieve,
+            {
+                "tools": "tools",
+                END: END,
+            },
+        )
         workflow.add_edge("tools", "grade_document")
         workflow.add_conditional_edges(
             "grade_document",
