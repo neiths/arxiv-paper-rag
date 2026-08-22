@@ -78,6 +78,13 @@ async def main():
         print("=" * 40)
         print(f"Original Query:  {result.get('original_query')}")
         print(f"Rewritten Query: {result.get('rewritten_query')}")
+        print(f"Routing Decision: {result.get('routing_decision')}")
+        if result.get("grading_results"):
+            print("Grading Results:")
+            for res in result.get("grading_results"):
+                print(
+                    f"  - Document: {res.document_id}, Relevant: {res.is_relevant}, Score: {res.score}, Reason: {res.reasoning}"
+                )
         print("-" * 40)
         print("Messages history:")
         for idx, msg in enumerate(result.get("messages", [])):
