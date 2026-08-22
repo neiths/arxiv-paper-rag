@@ -89,11 +89,13 @@ class AgenticRAGService:
         # Add nodes
         workflow.add_node("rewrite_query", ainvoke_rewrite_query_step)
         workflow.add_node("retrieve", ainvoke_retrieve_step)
+        workflow.add_node("tools", ToolNode(tools))
 
         # Define graph layout
         workflow.add_edge(START, "rewrite_query")
         workflow.add_edge("rewrite_query", "retrieve")
-        workflow.add_edge("retrieve", END)
+        workflow.add_edge("retrieve", "tools")
+        workflow.add_edge("tools", END)
 
         # Compile graph
         logger.info("Compiling LangGraph workflow")
