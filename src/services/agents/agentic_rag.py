@@ -1,6 +1,4 @@
 import logging
-import time
-from typing import Dict, List, Optional
 
 from langchain_core.messages import HumanMessage
 from langfuse.langchain import CallbackHandler
@@ -18,11 +16,20 @@ from .nodes import (
     ainvoke_rewrite_query_step,
     ainvoke_retrieve_step,
     ainvoke_generate_answer_step,
+    ainvoke_grade_documents_step,
 )
 from .state import AgentState
 from .tools import create_retriever_tool
 
 logger = logging.getLogger(__name__)
+
+
+def route_after_grading(state: AgentState) -> str:
+    """Route to generate_answer or rewrite_query based on grading result."""
+    decision = state.get("routing_decision")
+    if decision == "generate_answer":
+        return "generate_answer"
+    return "rewrite_query"
 
 
 class AgenticRAGService:
@@ -91,13 +98,22 @@ class AgenticRAGService:
         workflow.add_node("rewrite_query", ainvoke_rewrite_query_step)
         workflow.add_node("retrieve", ainvoke_retrieve_step)
         workflow.add_node("tools", ToolNode(tools))
+        workflow.add_node("grade_document", ainvoke_grade_documents_step)
         workflow.add_node("generate_answer", ainvoke_generate_answer_step)
 
         # Define graph layout
         workflow.add_edge(START, "rewrite_query")
         workflow.add_edge("rewrite_query", "retrieve")
         workflow.add_edge("retrieve", "tools")
-        workflow.add_edge("tools", "generate_answer")
+        workflow.add_edge("tools", "grade_document")
+        workflow.add_conditional_edges(
+            "grade_document",
+            route_after_grading,
+            {
+                "generate_answer": "generate_answer",
+                "rewrite_query": "rewrite_query",
+            },
+        )
         workflow.add_edge("generate_answer", END)
 
         # Compile graph
