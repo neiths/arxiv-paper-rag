@@ -9,7 +9,7 @@ from ..context import Context
 from ..models import GradeDocuments, GradingResult
 from ..prompts import GRADE_DOCUMENTS_PROMPT
 from ..state import AgentState
-from .utils import get_latest_context, get_latest_query
+from .utils import get_latest_context, get_latest_query, get_latest_context_and_query
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,7 @@ async def ainvoke_grade_documents_step(
     start_time = time.time()
 
     # Get query and context
-    question = get_latest_query(state["messages"])
-    context = get_latest_context(state["messages"])
+    question, context = get_latest_context_and_query(state["messages"])
 
     # Extract document chunks from context for logging
     chunks_preview = []

@@ -103,3 +103,21 @@ def get_latest_context(messages: list) -> str:
             return msg.content if hasattr(msg, "content") else ""
 
     return ""
+
+
+def get_latest_context_and_query(messages: list) -> tuple[str, str]:
+    """Get the latest context and user query from messages.
+
+    :param messages: List of messages
+    :returns: Tuple of latest context and user query
+    """
+    latest_context = ""
+    latest_query = ""
+
+    for msg in reversed(messages):
+        if isinstance(msg, ToolMessage):
+            latest_context = msg.content if hasattr(msg, "content") else ""
+        elif isinstance(msg, HumanMessage):
+            latest_query = msg.content
+
+    return latest_context, latest_query

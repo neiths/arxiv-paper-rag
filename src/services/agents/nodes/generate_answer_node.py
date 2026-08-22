@@ -7,7 +7,7 @@ from langgraph.runtime import Runtime
 from ..context import Context
 from ..prompts import GENERATE_ANSWER_PROMPT
 from ..state import AgentState
-from .utils import get_latest_context, get_latest_query
+from .utils import get_latest_context, get_latest_query, get_latest_context_and_query
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +29,7 @@ async def ainvoke_generate_answer_step(
     start_time = time.time()
 
     # Get question and context
-    question = get_latest_query(state["messages"])
-    context = get_latest_context(state["messages"])
+    context, question = get_latest_context_and_query(state["messages"])
 
     # Count sources from relevant_sources
     sources_count = len(state.get("relevant_sources", []))
