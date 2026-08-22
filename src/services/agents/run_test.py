@@ -229,8 +229,9 @@ async def main():
     )
     parser.add_argument(
         "--tracing",
-        action="store_true",
-        help="Enable Langfuse tracing if configured in environment.",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable/disable Langfuse tracing (default: True).",
     )
 
     args = parser.parse_args()
