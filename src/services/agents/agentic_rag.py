@@ -98,7 +98,7 @@ class AgenticRAGService:
         workflow.add_edge("rewrite_query", "retrieve")
         workflow.add_edge("retrieve", "tools")
         workflow.add_edge("tools", "generate_answer")
-        workflow.add_edge("tools", END)
+        workflow.add_edge("generate_answer", END)
 
         # Compile graph
         logger.info("Compiling LangGraph workflow")

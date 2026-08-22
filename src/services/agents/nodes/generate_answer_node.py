@@ -51,10 +51,14 @@ async def ainvoke_generate_answer_step(
 
     # Create span for answer generation
     span = None
-    if runtime.context.langfuse_enabled and runtime.context.trace:
+    span_ctx = None
+    if (
+        runtime.context.langfuse_enabled
+        and runtime.context.langfuse_tracer
+        and runtime.context.trace
+    ):
         try:
-            span = runtime.context.langfuse_tracer.start_span(
-                trace=runtime.context.trace,
+            span_ctx = runtime.context.langfuse_tracer.start_span(
                 name="answer_generation",
                 input_data={
                     "query": question,
@@ -68,6 +72,7 @@ async def ainvoke_generate_answer_step(
                     "temperature": runtime.context.temperature,
                 },
             )
+            span = span_ctx.__enter__()
             logger.debug("Created Langfuse span for answer generation")
         except Exception as e:
             logger.warning(f"Failed to create span for generate_answer node: {e}")
@@ -94,7 +99,7 @@ async def ainvoke_generate_answer_step(
         logger.info(f"Generated answer of length: {len(answer)} characters")
 
         # Update span with successful result
-        if span:
+        if span_ctx:
             execution_time = (time.time() - start_time) * 1000
             runtime.context.langfuse_tracer.update_span(
                 span,
@@ -117,7 +122,7 @@ async def ainvoke_generate_answer_step(
         answer = f"I apologize, but I encountered an error while generating the answer: {str(e)}\n\nPlease try again or rephrase your question."
 
         # Update span with error
-        if span:
+        if span_ctx:
             execution_time = (time.time() - start_time) * 1000
             runtime.context.langfuse_tracer.update_span(
                 span,
@@ -125,6 +130,9 @@ async def ainvoke_generate_answer_step(
                 metadata={"execution_time_ms": execution_time},
                 level="ERROR",
             )
-            runtime.context.langfuse_tracer.update_span(span)
+
+    finally:
+        if span_ctx:
+            span_ctx.__exit__(None, None, None)
 
     return {"messages": [AIMessage(content=answer)]}
