@@ -17,6 +17,7 @@ from .context import Context
 from .nodes import (
     ainvoke_rewrite_query_step,
     ainvoke_retrieve_step,
+    ainvoke_generate_answer_step,
 )
 from .state import AgentState
 from .tools import create_retriever_tool
@@ -90,11 +91,13 @@ class AgenticRAGService:
         workflow.add_node("rewrite_query", ainvoke_rewrite_query_step)
         workflow.add_node("retrieve", ainvoke_retrieve_step)
         workflow.add_node("tools", ToolNode(tools))
+        workflow.add_node("generate_answer", ainvoke_generate_answer_step)
 
         # Define graph layout
         workflow.add_edge(START, "rewrite_query")
         workflow.add_edge("rewrite_query", "retrieve")
         workflow.add_edge("retrieve", "tools")
+        workflow.add_edge("tools", "generate_answer")
         workflow.add_edge("tools", END)
 
         # Compile graph
