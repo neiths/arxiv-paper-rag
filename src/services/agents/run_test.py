@@ -81,7 +81,17 @@ async def main():
         print("-" * 40)
         print("Messages history:")
         for idx, msg in enumerate(result.get("messages", [])):
-            print(f"  {idx + 1}. [{type(msg).__name__}]: {msg.content}")
+            if type(msg).__name__ == "ToolMessage":
+                # Format tool output cleanly
+                tool_name = getattr(msg, "name", "unknown")
+                content_preview = (
+                    msg.content[:300] + "..." if len(msg.content) > 300 else msg.content
+                )
+                print(
+                    f"  {idx + 1}. [ToolMessage (name={tool_name})]: {content_preview}"
+                )
+            else:
+                print(f"  {idx + 1}. [{type(msg).__name__}]: {msg.content}")
         print("=" * 40 + "\n")
 
     except Exception as e:
