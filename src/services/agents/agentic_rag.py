@@ -77,6 +77,15 @@ class AgenticRAGService:
         # Create workflow with AgentState and Context schema
         workflow = StateGraph(AgentState, context_schema=Context)
 
+        # Create tools (these still need to be created upfront for ToolNode)
+        retriever_tool = create_retriever_tool(
+            opensearch_client=self.opensearch,
+            embeddings_client=self.embeddings,
+            top_k=self.graph_config.top_k,
+            use_hybrid=self.graph_config.use_hybrid,
+        )
+        tools = [retriever_tool]
+
         # Add nodes
         workflow.add_node("rewrite_query", ainvoke_rewrite_query_step)
         workflow.add_node("retrieve", ainvoke_retrieve_step)
