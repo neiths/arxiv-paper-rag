@@ -1,6 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from src.dependencies import AgenticRAGDep, LangfuseDep
-from src.schemas.api.ask import AgentAskResponse, AskRequest, FeedbackResponse
+from src.schemas.api.ask import (
+    AgentAskResponse,
+    AskRequest,
+    FeedbackRequest,
+    FeedbackResponse,
+)
 
 
 router = APIRouter(prexfix="/api/v1", tags=["agentic-rag"])
@@ -57,4 +62,58 @@ async def ask_agentic(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error Processing question: {str(e)}"
+        )
+
+
+@router.post("/feedback", response_model=FeedbackResponse)
+async def submit_feedback(
+    request: FeedbackRequest,
+    langfuse_tracer: LangfuseDep,
+) -> FeedbackResponse:
+    """
+    Submit user feedback for an agentic RAG response.
+
+    This endpoint allows users to rate the quality of answers and provide
+    optional comments. Feedback is tracked in Langfuse for continuous improvement.
+
+    Args:
+        request: Feedback data including trace_id, score, and optional comment
+        langfuse_tracer: Injected Langfuse tracer service
+
+    Returns:
+        FeedbackResponse indicating success or failure
+
+    Raises:
+        HTTPException: If feedback submission fails
+    """
+    try:
+        if not langfuse_tracer:
+            raise HTTPException(
+                status_code=503,
+                detail="Langfuse tracing is disabled. Cannot submit feedback.",
+            )
+
+        success = langfuse_tracer.submit_feedback(
+            trace_id=request.trace_id,
+            score=request.score,
+            comment=request.comment,
+        )
+
+        if success:
+            # Flush to ensure feedback is sent immediately
+            langfuse_tracer.flush()
+
+            return FeedbackResponse(
+                success=True, message="Feedback recorded successfully"
+            )
+        else:
+            raise HTTPException(
+                status_code=500, detail="Failed to submit feedback to Langfuse"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error submitting feedback: {str(e)}"
         )
