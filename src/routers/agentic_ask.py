@@ -8,7 +8,7 @@ from src.schemas.api.ask import (
 )
 
 
-router = APIRouter(prexfix="/api/v1", tags=["agentic-rag"])
+router = APIRouter(tags=["agentic-rag"])
 
 
 @router.post("/ask-agentic", response_model=AgentAskResponse)
@@ -47,10 +47,20 @@ async def ask_agentic(
             query=request.query,
         )
 
+        raw_sources = result.get("sources", [])
+        sources = [
+            (
+                s.get("url") or f"https://arxiv.org/pdf/{s.get('arxiv_id')}.pdf"
+                if isinstance(s, dict)
+                else str(s)
+            )
+            for s in raw_sources
+        ]
+
         return AgentAskResponse(
             query=result["query"],
             answer=result["answer"],
-            sources=result.get("sources", []),
+            sources=sources,
             chunks_used=request.top_k,
             search_mode="hybrid" if request.use_hybrid else "bm25",
             reasoning_steps=result.get("reasoning_steps", []),

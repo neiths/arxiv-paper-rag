@@ -113,7 +113,9 @@ app.include_router(stream_router, prefix="/api/v1")  # Streaming RAG responses
 app.include_router(
     ollama.router, prefix="/api/v1"
 )  # Ollama model management and text generation
-app.include_router(agentic_ask.router)  # Agentic RAG with intelligent retrieval
+app.include_router(
+    agentic_ask.router, prefix="/api/v1"
+)  # Agentic RAG with intelligent retrieval
 
 
 if __name__ == "__main__":

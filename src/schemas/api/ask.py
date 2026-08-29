@@ -52,14 +52,14 @@ class AskResponse(BaseModel):
         }
 
 
-class AgenticAskResponse(AskResponse):
+class AgentAskResponse(AskResponse):
     """Response model for agentic RAG question answering."""
 
-    reasoning_steps: List[str] = Field(..., description="Agent's decision-making steps")
+    reasoning_steps: list[str] = Field(..., description="Agent's decision-making steps")
     retrieval_attempts: int = Field(
         ..., description="Number of document retrieval attempts"
     )
-    trace_id: Optional[str] = Field(
+    trace_id: str | None = Field(
         None, description="Langfuse trace ID for feedback and debugging"
     )
 
@@ -89,7 +89,7 @@ class FeedbackRequest(BaseModel):
     score: float = Field(
         ..., description="Feedback score (0-1 or -1 to 1)", ge=-1, le=1
     )
-    comment: Optional[str] = Field(
+    comment: str | None = Field(
         None, description="Optional feedback comment", max_length=1000
     )
 
