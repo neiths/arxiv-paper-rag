@@ -176,6 +176,19 @@ class AuthSettings(BaseConfigSettings):
     jwt_algorithm: str = "HS256"
 
 
+class TelegramSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="TELEGRAM__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    bot_token: str = ""
+    enabled: bool = False
+
+
 class Settings(BaseConfigSettings):
     app_version: str = "0.1.0"
     debug: bool = True
