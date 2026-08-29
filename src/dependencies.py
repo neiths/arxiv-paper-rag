@@ -121,4 +121,4 @@ def get_agentic_rag_service(
     )
 
 
-AgenticRAGDep = Annotated[AgenticRAGService, Depends(get_agentic_rag_service())]
+AgenticRAGDep = Annotated[AgenticRAGService, Depends(get_agentic_rag_service)]
