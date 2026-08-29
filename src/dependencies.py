@@ -103,7 +103,7 @@ LangfuseDep = Annotated[LangfuseTracer, Depends(get_langfuse_tracer)]
 AuthenticatedUserDep = Annotated[dict | None, Depends(get_current_user)]
 
 
-def get_agentic_rage_service(
+def get_agentic_rag_service(
     opensearch: OpenSearchDep,
     ollama: OllamaDep,
     embeddings: EmbeddingsDep,
@@ -121,4 +121,4 @@ def get_agentic_rage_service(
     )
 
 
-AgenticRAGDep = Annotated[AgenticRAGService, Depends(get_agentic_rage_service())]
+AgenticRAGDep = Annotated[AgenticRAGService, Depends(get_agentic_rag_service())]
