@@ -16,6 +16,7 @@ from src.services.langfuse.factory import make_langfuse_tracer
 from src.services.ollama.factory import make_ollama_client
 from src.services.opensearch.factory import make_opensearch_client
 from src.services.pdf_parser.factory import make_pdf_parser_service
+from src.services.telegram.factory import make_telegram_service
 
 # Setup logging
 logging.basicConfig(
@@ -74,12 +75,34 @@ async def lifespan(app: FastAPI):
         "Services initialized: arXiv API client, PDF parser, OpenSearch, Embeddings, Ollama, Langfuse, Cache"
     )
 
+    # initialize Telegram bot service
+    telegram_service = make_telegram_service(
+        opensearch_client=opensearch_client,
+        embeddings_service=app.state.embeddings_service,
+        ollama_client=app.state.ollama_client,
+        cache_client=app.state.cache_client,
+        langfuse_tracer=app.state.langfuse_tracer,
+    )
+
+    if telegram_service:
+        app.state.telegram_service = telegram_service
+        try:
+            await telegram_service.start()
+            logger.info("Telegram bot started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start Telegram bot: {e}")
+    else:
+        logger.info("Telegram bot service not initialized (disabled or misconfigured)")
+
     logger.info("API ready")
     yield
 
     # cleanup on shutdown
     if hasattr(app.state, "langfuse_tracer") and app.state.langfuse_tracer:
         app.state.langfuse_tracer.shutdown()
+
+    if hasattr(app.state, "telegram_service") and app.state.telegram_service:
+        await app.state.telegram_service.stop()
 
     database.shutdown()
     logger.info("API shutdown complete")
