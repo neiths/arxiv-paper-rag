@@ -2,8 +2,13 @@ import logging
 from pathlib import Path
 
 import pypdfium2 as pdfium
+import torch
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.datamodel.pipeline_options import (
+    AcceleratorDevice,
+    AcceleratorOptions,
+    PdfPipelineOptions,
+)
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from src.exceptions import PDFParsingException, PDFValidationError
 from src.schemas.pdf_parser.models import PaperSection, ParserType, PdfContent
@@ -20,6 +25,8 @@ class DoclingParser:
         max_file_size_mb: int,
         do_ocr: bool = False,
         do_table_structure: bool = True,
+        device: str = "auto",
+        num_threads: int = 4,
     ):
         """Initialize DocumentConverter with optimized pipeline options.
 
@@ -27,11 +34,38 @@ class DoclingParser:
         :param max_file_size_mb: Maximum file size in MB
         :param do_ocr: Enable OCR for scanned PDFs (default: False, very slow)
         :param do_table_structure: Extract table structures (default: True)
+        :param device: Accelerator device ('auto', 'cuda', 'cpu', 'mps', 'xpu')
+        :param num_threads: Number of CPU threads for acceleration
         """
+        try:
+            device_enum = AcceleratorDevice(device.lower())
+        except ValueError:
+            logger.warning(
+                f"Unknown accelerator device '{device}', falling back to AUTO"
+            )
+            device_enum = AcceleratorDevice.AUTO
+
+        cuda_available = torch.cuda.is_available()
+        logger.info(
+            f"DoclingParser initializing with device='{device_enum.value}', "
+            f"torch.cuda.is_available()={cuda_available}"
+        )
+        if device_enum == AcceleratorDevice.CUDA and not cuda_available:
+            logger.warning(
+                "Docling device configured as 'cuda' but CUDA is not available. Falling back to CPU."
+            )
+            device_enum = AcceleratorDevice.CPU
+
+        accelerator_options = AcceleratorOptions(
+            num_threads=num_threads,
+            device=device_enum,
+        )
+
         # Configure pipeline options
         pipeline_options = PdfPipelineOptions(
             do_table_structure=do_table_structure,
             do_ocr=do_ocr,  # Usually disabled for speed
+            accelerator_options=accelerator_options,
         )
 
         self._converter = DocumentConverter(
