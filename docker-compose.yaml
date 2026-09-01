@@ -11,6 +11,9 @@ services:
     container_name: rag-api
     ports:
       - "8000:8000"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
       postgres:
         condition: service_healthy
@@ -171,6 +174,13 @@ services:
       context: ./airflow
       dockerfile: Dockerfile
     container_name: rag-airflow
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     depends_on:
       postgres:
         condition: service_healthy
@@ -188,6 +198,8 @@ services:
       - OPENSEARCH__HOST=http://opensearch:9200
       - PYTHONPATH=/opt/airflow
       - REDIS__HOST=redis
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - airflow_logs:/opt/airflow/logs
@@ -195,6 +207,9 @@ services:
       - ./src:/opt/airflow/src
     ports:
       - "8081:8080"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
