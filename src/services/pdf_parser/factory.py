@@ -14,4 +14,6 @@ def make_pdf_parser_service() -> PDFParserService:
         max_file_size_mb=settings.pdf_parser.max_file_size_mb,
         do_ocr=settings.pdf_parser.do_ocr,
         do_table_structure=settings.pdf_parser.do_table_structure,
+        device=settings.pdf_parser.device,
+        num_threads=settings.pdf_parser.num_threads,
     )

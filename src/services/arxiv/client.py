@@ -58,6 +58,34 @@ class ArxivClient:
     def search_category(self) -> str:
         return self._settings.search_category
 
+    async def _fetch_xml_with_retry(self, url: str) -> str:
+        """Fetch XML from arXiv API with rate limiting and retry logic for transient connection errors."""
+        # Add rate limiting delay between all requests (arXiv recommends 3 seconds)
+        if self._last_request_time is not None:
+            time_since_last = time.time() - self._last_request_time
+            if time_since_last < self.rate_limit_delay:
+                sleep_time = self.rate_limit_delay - time_since_last
+                await asyncio.sleep(sleep_time)
+
+        self._last_request_time = time.time()
+
+        max_retries = self._settings.download_max_retries
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                    return response.text
+            except (httpx.ConnectError, httpx.NetworkError) as e:
+                if attempt < max_retries - 1:
+                    wait_time = self._settings.download_retry_delay_base * (attempt + 1)
+                    logger.warning(
+                        f"arXiv connection error (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait_time}s..."
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    raise
+
     async def fetch_papers(
         self,
         max_results: int | None = None,
@@ -110,21 +138,7 @@ class ArxivClient:
             logger.info(
                 f"Fetching {max_results} {self.search_category} papers from arXiv"
             )
-
-            # Add rate limiting delay between all requests (arXiv recommends 3 seconds)
-            if self._last_request_time is not None:
-                time_since_last = time.time() - self._last_request_time
-                if time_since_last < self.rate_limit_delay:
-                    sleep_time = self.rate_limit_delay - time_since_last
-                    await asyncio.sleep(sleep_time)
-
-            self._last_request_time = time.time()
-
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                xml_data = response.text
-
+            xml_data = await self._fetch_xml_with_retry(url)
             papers = self._parse_response(xml_data)
             logger.info(f"Fetched {len(papers)} papers")
 
@@ -192,20 +206,7 @@ class ArxivClient:
         url = f"{self.base_url}?{urlencode(params, quote_via=quote, safe=safe)}"
 
         try:
-            # Add rate limiting delay between all requests (arXiv recommends 3 seconds)
-            if self._last_request_time is not None:
-                time_since_last = time.time() - self._last_request_time
-                if time_since_last < self.rate_limit_delay:
-                    sleep_time = self.rate_limit_delay - time_since_last
-                    await asyncio.sleep(sleep_time)
-
-            self._last_request_time = time.time()
-
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                xml_data = response.text
-
+            xml_data = await self._fetch_xml_with_retry(url)
             papers = self._parse_response(xml_data)
             logger.info(f"Query returned {len(papers)} papers")
 

@@ -18,6 +18,8 @@ class PDFParserService:
         max_file_size_mb: int,
         do_ocr: bool = False,
         do_table_structure: bool = True,
+        device: str = "auto",
+        num_threads: int = 4,
     ):
         """Initialize PDF parser service with configurable limits."""
         self.docling_parser = DoclingParser(
@@ -25,6 +27,8 @@ class PDFParserService:
             max_file_size_mb=max_file_size_mb,
             do_ocr=do_ocr,
             do_table_structure=do_table_structure,
+            device=device,
+            num_threads=num_threads,
         )
 
     async def parse_pdf(self, pdf_path: Path) -> PdfContent | None:

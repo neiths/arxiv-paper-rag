@@ -30,15 +30,18 @@ RUN mkdir -p ${AIRFLOW_HOME} && \
     chown -R 50000:50000 ${AIRFLOW_HOME} && \
     chmod -R 755 ${AIRFLOW_HOME}
 
+# Install uv for fast, reliable package installations with parallel downloads & retry
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
 # Install Airflow with PostgreSQL support
-RUN pip install --no-cache-dir \
+RUN uv pip install --system \
     "apache-airflow[postgres]==${AIRFLOW_VERSION}" \
     --constraint "${CONSTRAINT_URL}" \
     psycopg2-binary
 
-# Copy requirements and install project dependencies
+# Copy requirements and install project dependencies with CUDA PyTorch support
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+RUN uv pip install --system --torch-backend cu124 -r /tmp/requirements.txt
 
 # Copy and set up entrypoint script
 COPY entrypoint.sh /entrypoint.sh

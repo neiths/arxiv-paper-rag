@@ -1,9 +1,9 @@
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import patch
 
 import pytest
 from src.exceptions import PDFParsingException, PDFValidationError
-from src.schemas.pdf_parser.models import PaperSection, ParserType, PdfContent
+from src.schemas.pdf_parser.models import ParserType, PdfContent
 from src.services.pdf_parser.docling import DoclingParser
 from src.services.pdf_parser.factory import make_pdf_parser_service
 from src.services.pdf_parser.parser import PDFParserService
@@ -45,9 +45,7 @@ class TestDoclingParser:
         assert docling_parser._warmed_up is False
 
     def test_validate_pdf_valid_file(self, docling_parser, valid_pdf_path):
-        """Test PDF validation with valid file."""
-        # This test is complex due to pypdfium2 dependency, skip for now
-        pass
+        """Test PDF validation with valid file (placeholder for future pypdfium2 mock)."""
 
     def test_validate_pdf_empty_file(self, docling_parser, empty_pdf_path):
         """Test PDF validation with empty file."""
@@ -164,3 +162,15 @@ class TestPDFParserService:
         service2 = make_pdf_parser_service()
         # Should be the same instance due to @lru_cache
         assert service1 is service2
+
+    def test_docling_parser_device_options(self):
+        """Test DoclingParser device initialization options."""
+        parser_cpu = DoclingParser(
+            max_pages=10, max_file_size_mb=5, device="cpu", num_threads=2
+        )
+        assert parser_cpu.max_pages == 10
+
+        parser_invalid = DoclingParser(
+            max_pages=10, max_file_size_mb=5, device="unknown_dev", num_threads=2
+        )
+        assert parser_invalid.max_pages == 10

@@ -65,6 +65,8 @@ class PDFParserSettings(BaseConfigSettings):
     max_file_size_mb: int = 20
     do_ocr: bool = False
     do_table_structure: bool = True
+    device: str = "auto"  # "auto", "cuda", "cpu", "mps", "xpu"
+    num_threads: int = 4
 
 
 class ChunkingSettings(BaseConfigSettings):
@@ -174,19 +176,6 @@ class AuthSettings(BaseConfigSettings):
     secret_token: str = ""
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
-
-
-class TelegramSettings(BaseConfigSettings):
-    model_config = SettingsConfigDict(
-        env_file=[".env", str(ENV_FILE_PATH)],
-        env_prefix="TELEGRAM__",
-        extra="ignore",
-        frozen=True,
-        case_sensitive=False,
-    )
-
-    bot_token: str = ""
-    enabled: bool = False
 
 
 class Settings(BaseConfigSettings):
