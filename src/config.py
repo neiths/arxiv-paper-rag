@@ -163,6 +163,24 @@ class TelegramSettings(BaseConfigSettings):
     enabled: bool = False
 
 
+class FacebookSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="FACEBOOK__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    page_id: str = ""
+    page_access_token: str = ""
+    graph_api_version: str = "v21.0"
+    base_url: str = "https://graph.facebook.com"
+    enabled: bool = False
+    auto_publish: bool = True
+    dry_run: bool = False
+
+
 class AuthSettings(BaseConfigSettings):
     model_config = SettingsConfigDict(
         env_file=[".env", str(ENV_FILE_PATH)],
@@ -195,6 +213,10 @@ class Settings(BaseConfigSettings):
     ollama_model: str = "llama3.2:latest"
     ollama_timeout: int = 300
 
+    # Optional Cloud LLM API keys for deep research
+    gemini_api_key: str = ""
+    openai_api_key: str = ""
+
     # Jina AI embeddings configuration
     jina_api_key: str = ""
 
@@ -206,6 +228,7 @@ class Settings(BaseConfigSettings):
     langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     telegram: TelegramSettings = Field(default_factory=TelegramSettings)
+    facebook: FacebookSettings = Field(default_factory=FacebookSettings)
 
     @field_validator("postgres_database_url")
     @classmethod
