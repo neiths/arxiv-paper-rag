@@ -392,16 +392,30 @@ Ensure external services (PostgreSQL, OpenSearch, Ollama, Redis) are running (ea
 
 ### Running Tests
 
+All tests use mocking for external API calls to avoid rate limiting and ensure reliable test execution.
+
 ```bash
 # Run all tests
 pytest tests/
 
-# Run with coverage
-pytest --cov=src tests/
+# Run with coverage report
+pytest --cov=src --cov-report=html tests/
+
+# Run specific test categories
+pytest tests/unit/ -v        # Fast unit tests
+pytest tests/api/ -v         # API endpoint tests
+pytest tests/integration/ -v # Integration tests (with mocking)
 
 # Run specific test file
-pytest tests/test_arxiv_client.py -v
+pytest tests/integration/test_services.py -v
 ```
+
+**Important Notes:**
+
+- All external API calls (arXiv, embeddings, etc.) are mocked to prevent rate limiting
+- Tests run offline and don't require API keys or internet connectivity
+- Use `pytest -v -s` to see print output and detailed test execution
+- See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing guide and troubleshooting
 
 ## API Reference
 
@@ -710,6 +724,7 @@ Contributions welcome! Please:
 
 ## Support & Documentation
 
+- **Testing Guide**: [docs/TESTING.md](docs/TESTING.md) — Running tests, handling API rate limits, mocking strategies
 - **Gap Analysis & Architecture**: [docs/rag_architecture_gap_analysis.md](docs/rag_architecture_gap_analysis.md)
 - **Hybrid Search Deep Dive**: [docs/Query_Builder_Class_Explanation.md](docs/Query_Builder_Class_Explanation.md)
 - **OpenSearch Configuration**: [docs/OpenSearch_Index_Configuration_Explained.md](docs/OpenSearch_Index_Configuration_Explained.md)
