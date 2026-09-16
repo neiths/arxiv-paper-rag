@@ -138,141 +138,274 @@ async def stream_response(
         yield f"Unexpected error: {e!s}"
 
 
+async def run_deep_agent_ui(
+    query: str,
+    language: str,
+    post_style: str,
+    auto_publish: bool,
+    model: str,
+):
+    """Call Deep Research endpoint from Gradio UI."""
+    if not query.strip():
+        return "⚠️ Please enter an arXiv paper URL, ID, or research topic.", "", ""
+
+    payload = {
+        "query": query.strip(),
+        "language": "vi" if "Vietnamese" in language else "en",
+        "post_style": post_style,
+        "auto_publish": auto_publish,
+        "model_name": model if model else None,
+    }
+    url = f"{API_BASE_URL}/deep-research/run"
+    try:
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            res = await client.post(url, json=payload)
+            if res.status_code != 200:
+                return f"❌ Error ({res.status_code}): {res.text}", "", ""
+            data = res.json()
+            synthesis = data.get("synthesis_report", "")
+            fb_post = data.get("facebook_post", "")
+            status_info = f"**Status:** {'Published to Facebook ✅' if data.get('published_to_facebook') else 'Draft preserved 📝'}\n"
+            if data.get("facebook_post_id"):
+                status_info += f"- **Post ID:** `{data.get('facebook_post_id')}`\n"
+            if data.get("facebook_post_url"):
+                status_info += f"- **Post URL:** [{data.get('facebook_post_url')}]({data.get('facebook_post_url')})\n"
+            status_info += f"- **Duration:** {data.get('duration_seconds')}s\n"
+            status_info += f"- **Papers Analyzed:** {len(data.get('papers', []))}\n"
+            return synthesis, fb_post, status_info
+    except Exception as e:
+        return f"❌ Request error: {str(e)}", "", ""
+
+
+async def publish_draft_to_facebook_ui(message: str, link: str):
+    """Publish drafted post directly to Facebook."""
+    if not message.strip():
+        return "⚠️ Cannot publish empty post."
+    url = f"{API_BASE_URL}/deep-research/publish-facebook"
+    payload = {"message": message.strip(), "link": link.strip() if link else None}
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            res = await client.post(url, json=payload)
+            data = res.json()
+            if res.status_code in (200, 201) and data.get("success"):
+                sim_text = " [Simulated/Dry-run]" if data.get("is_simulated") else ""
+                return f"✅ Published to Facebook! Post ID: {data.get('post_id')}{sim_text}"
+            else:
+                return f"❌ Publishing failed: {data.get('message', res.text)}"
+    except Exception as e:
+        return f"❌ Request error: {str(e)}"
+
+
 def create_gradio_interface():
-    """Create and configure the Gradio interface"""
+    """Create and configure the Gradio interface with RAG Chat and Deep Agent tabs."""
 
     with gr.Blocks(
-        title="arXiv Paper Curator - RAG Chat",
+        title="arXiv Paper Curator & Deep Agent",
         theme=gr.themes.Soft(),
     ) as interface:
         gr.Markdown(
             """
-            # 🔬 arXiv Paper Curator - RAG Chat
-
-            Ask questions about machine learning and AI research papers from arXiv.
-            The system will search through indexed papers and provide answers with sources.
+            # 🔬 arXiv Paper Curator & Deep Research Agent
+            Research cutting-edge arXiv papers, ask in-depth questions, or autonomously generate and publish Facebook posts.
             """
         )
 
-        with gr.Row():
-            with gr.Column(scale=3):
-                query_input = gr.Textbox(
-                    label="Your Question",
-                    placeholder="What are transformers in machine learning?",
-                    lines=2,
-                    max_lines=5,
+        with gr.Tabs():
+            with gr.TabItem("💬 arXiv RAG Chat"):
+                with gr.Row():
+                    with gr.Column(scale=3):
+                        query_input = gr.Textbox(
+                            label="Your Question",
+                            placeholder="What are transformers in machine learning?",
+                            lines=2,
+                            max_lines=5,
+                        )
+
+                    with gr.Column(scale=1):
+                        submit_btn = gr.Button(
+                            "Ask Question", variant="primary", size="lg"
+                        )
+
+                with (
+                    gr.Row(),
+                    gr.Column(),
+                    gr.Accordion("Advanced Options", open=False),
+                ):
+                    top_k = gr.Slider(
+                        minimum=1,
+                        maximum=10,
+                        value=3,
+                        step=1,
+                        label="Number of chunks to retrieve",
+                        info="More chunks = more context but slower generation",
+                    )
+
+                    use_hybrid = gr.Checkbox(
+                        value=True,
+                        label="Use hybrid search (BM25 + vector embeddings)",
+                        info="Usually better results than keyword-only search",
+                    )
+
+                    model_choice = gr.Dropdown(
+                        choices=[
+                            "llama3.2:latest",
+                            "llama3.2:3b",
+                            "llama3.1:8b",
+                            "qwen2.5:7b",
+                        ],
+                        value=DEFAULT_MODEL,
+                        label="LLM Model",
+                        info="Larger models may give better answers but are slower",
+                    )
+
+                    categories = gr.Textbox(
+                        label="arXiv Categories (optional)",
+                        placeholder="cs.AI, cs.LG, cs.CL",
+                        info="Comma-separated. Leave empty for all categories",
+                    )
+
+                response_output = gr.Markdown(
+                    label="Answer",
+                    value="Ask a question to get started!",
+                    height=400,
+                    elem_classes=["response-markdown"],
                 )
 
-            with gr.Column(scale=1):
-                submit_btn = gr.Button("Ask Question", variant="primary", size="lg")
+                # Examples
+                gr.Examples(
+                    examples=[
+                        [
+                            "What are transformers in machine learning?",
+                            3,
+                            True,
+                            "llama3.2:latest",
+                            "cs.AI, cs.LG",
+                        ],
+                        [
+                            "How do convolutional neural networks work?",
+                            5,
+                            True,
+                            "llama3.2:latest",
+                            "cs.CV, cs.LG",
+                        ],
+                    ],
+                    inputs=[query_input, top_k, use_hybrid, model_choice, categories],
+                )
 
-        with gr.Row(), gr.Column(), gr.Accordion("Advanced Options", open=False):
-            top_k = gr.Slider(
-                minimum=1,
-                maximum=10,
-                value=3,
-                step=1,
-                label="Number of chunks to retrieve",
-                info="More chunks = more context but slower generation",
-            )
+                # Handle submission
+                submit_btn.click(
+                    fn=stream_response,
+                    inputs=[query_input, top_k, use_hybrid, model_choice, categories],
+                    outputs=[response_output],
+                    show_progress=True,
+                )
 
-            use_hybrid = gr.Checkbox(
-                value=True,
-                label="Use hybrid search (BM25 + vector embeddings)",
-                info="Usually better results than keyword-only search",
-            )
+                query_input.submit(
+                    fn=stream_response,
+                    inputs=[query_input, top_k, use_hybrid, model_choice, categories],
+                    outputs=[response_output],
+                    show_progress=True,
+                )
 
-            model_choice = gr.Dropdown(
-                choices=[
-                    "llama3.2:latest",
-                    "llama3.2:3b",
-                    "llama3.1:8b",
-                    "qwen2.5:7b",
-                ],
-                value=DEFAULT_MODEL,
-                label="LLM Model",
-                info="Larger models may give better answers but are slower",
-            )
+            with gr.TabItem("🤖 Deep Agent & Facebook Publisher"):
+                gr.Markdown(
+                    """
+                    ### 🚀 Autonomous Deep Research & Facebook Publishing
+                    Enter an arXiv paper URL / ID or a broad research topic.
+                    The Deep Agent will analyze paper methodology, benchmarks, and limitations, then synthesize an engaging Facebook post.
+                    """
+                )
+                with gr.Row():
+                    with gr.Column(scale=3):
+                        deep_query = gr.Textbox(
+                            label="arXiv Paper URL / ID or Topic",
+                            placeholder="e.g. https://arxiv.org/abs/2403.05530 or 'Test-Time Compute in LLMs'",
+                            lines=2,
+                        )
+                    with gr.Column(scale=1):
+                        deep_run_btn = gr.Button(
+                            "🚀 Run Deep Research", variant="primary", size="lg"
+                        )
 
-            categories = gr.Textbox(
-                label="arXiv Categories (optional)",
-                placeholder="cs.AI, cs.LG, cs.CL",
-                info="Comma-separated. Leave empty for all categories",
-            )
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        lang_choice = gr.Radio(
+                            choices=["English", "Vietnamese (Tiếng Việt)"],
+                            value="English",
+                            label="Post Language",
+                        )
+                        style_choice = gr.Dropdown(
+                            choices=[
+                                "technical_deep_dive",
+                                "executive_summary",
+                                "viral_breakdown",
+                            ],
+                            value="technical_deep_dive",
+                            label="Facebook Post Style",
+                        )
+                        auto_pub_checkbox = gr.Checkbox(
+                            value=False,
+                            label="Auto-publish to Facebook Page immediately",
+                            info="If unchecked, you can review and publish with 1 click below.",
+                        )
+                        deep_model = gr.Dropdown(
+                            choices=[
+                                "llama3.2:latest",
+                                "qwen2.5:7b",
+                                "gemini-1.5-flash",
+                                "gpt-4o",
+                            ],
+                            value="llama3.2:latest",
+                            label="Reasoning LLM",
+                        )
 
-        response_output = gr.Markdown(
-            label="Answer",
-            value="Ask a question to get started!",
-            height=400,
-            elem_classes=["response-markdown"],
-        )
+                    with gr.Column(scale=2):
+                        status_box = gr.Markdown(
+                            value="Waiting to start deep research...", label="Status"
+                        )
 
-        # Examples
-        gr.Examples(
-            examples=[
-                [
-                    "What are transformers in machine learning?",
-                    3,
-                    True,
-                    "llama3.2:latest",
-                    "cs.AI, cs.LG",
-                ],
-                [
-                    "How do convolutional neural networks work?",
-                    5,
-                    True,
-                    "llama3.2:latest",
-                    "cs.CV, cs.LG",
-                ],
-                [
-                    "What is attention mechanism in deep learning?",
-                    4,
-                    False,
-                    "llama3.2:latest",
-                    "cs.AI",
-                ],
-                [
-                    "Explain reinforcement learning algorithms",
-                    3,
-                    True,
-                    "llama3.2:latest",
-                    "cs.LG, cs.AI",
-                ],
-                [
-                    "What are the latest developments in NLP?",
-                    5,
-                    True,
-                    "llama3.2:latest",
-                    "cs.CL",
-                ],
-            ],
-            inputs=[query_input, top_k, use_hybrid, model_choice, categories],
-        )
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        gr.Markdown("#### 🧠 In-Depth Scientific Synthesis")
+                        synthesis_output = gr.Markdown(value="", height=400)
+                    with gr.Column(scale=1):
+                        gr.Markdown("#### 📱 Generated Facebook Post")
+                        fb_post_output = gr.Textbox(
+                            label="Editable Facebook Post", lines=15
+                        )
+                        fb_link_input = gr.Textbox(
+                            label="Attached Link (optional)",
+                            placeholder="https://arxiv.org/abs/...",
+                        )
+                        with gr.Row():
+                            publish_btn = gr.Button(
+                                "📤 Publish Draft to Facebook", variant="secondary"
+                            )
+                            pub_status = gr.Label(label="Publishing Status")
 
-        # Handle submission
-        submit_btn.click(
-            fn=stream_response,
-            inputs=[query_input, top_k, use_hybrid, model_choice, categories],
-            outputs=[response_output],
-            show_progress=True,
-        )
+                deep_run_btn.click(
+                    fn=run_deep_agent_ui,
+                    inputs=[
+                        deep_query,
+                        lang_choice,
+                        style_choice,
+                        auto_pub_checkbox,
+                        deep_model,
+                    ],
+                    outputs=[synthesis_output, fb_post_output, status_box],
+                )
 
-        # Handle Enter key
-        query_input.submit(
-            fn=stream_response,
-            inputs=[query_input, top_k, use_hybrid, model_choice, categories],
-            outputs=[response_output],
-            show_progress=True,
-        )
+                publish_btn.click(
+                    fn=publish_draft_to_facebook_ui,
+                    inputs=[fb_post_output, fb_link_input],
+                    outputs=[pub_status],
+                )
 
         gr.Markdown(
             """
             ---
-
-            **Note**: Make sure the RAG API server is running at `http://localhost:8000` before using this interface.
-
-            **Categories**: cs.AI (Artificial Intelligence), cs.LG (Machine Learning), cs.CL (Computational Linguistics),
-            cs.CV (Computer Vision), cs.NE (Neural Networks), stat.ML (Statistics - Machine Learning)
+            **Note**: Ensure FastAPI server is running (`uvicorn src.main:app --port 8000`).
+            Configure `FACEBOOK__PAGE_ID` and `FACEBOOK__PAGE_ACCESS_TOKEN` in `.env` for live Facebook publishing.
             """
         )
 
