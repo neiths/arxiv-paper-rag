@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from src.config import get_settings
 from src.db.factory import make_database
 from src.middlewares import BearerTokenAuthMiddleware, RequestLoggingMiddleware
-from src.routers import hybrid_search, ollama, ping, agentic_ask
+from src.routers import agentic_ask, deep_research, hybrid_search, ollama, ping
 from src.routers.ask import ask_router, stream_router
 from src.services.arxiv.factory import make_arxiv_client
 from src.services.cache.factory import make_cache_client
@@ -102,7 +102,10 @@ async def lifespan(app: FastAPI):
         app.state.langfuse_tracer.shutdown()
 
     if hasattr(app.state, "telegram_service") and app.state.telegram_service:
-        await app.state.telegram_service.stop()
+        try:
+            await app.state.telegram_service.stop()
+        except Exception as e:
+            logger.warning(f"Error stopping Telegram bot: {e}")
 
     database.shutdown()
     logger.info("API shutdown complete")
@@ -139,6 +142,9 @@ app.include_router(
 app.include_router(
     agentic_ask.router, prefix="/api/v1"
 )  # Agentic RAG with intelligent retrieval
+app.include_router(
+    deep_research.router, prefix="/api/v1"
+)  # Deep Research Agent & Social Media Publishing
 
 
 if __name__ == "__main__":
