@@ -23,6 +23,8 @@ from src.services.opensearch.client import OpenSearchClient
 from src.services.pdf_parser.parser import PDFParserService
 from src.services.agents.agentic_rag import AgenticRAGService
 from src.services.agents.factory import make_agentic_rag_service
+from src.services.facebook.factory import make_facebook_service
+from src.services.agents.deep_research.factory import make_deep_research_service
 
 
 @lru_cache
@@ -122,3 +124,30 @@ def get_agentic_rag_service(
 
 
 AgenticRAGDep = Annotated[AgenticRAGService, Depends(get_agentic_rag_service)]
+
+
+def get_facebook_service(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> "FacebookService":
+    """Get Facebook publishing service."""
+
+    return make_facebook_service(settings)
+
+
+def get_deep_research_service(
+    settings: Annotated[Settings, Depends(get_settings)],
+    arxiv: ArxivDep,
+    pdf_parser: PDFParserDep,
+    facebook: Annotated["FacebookService", Depends(get_facebook_service)],
+) -> "DeepResearchService":
+    """Get Deep Research Agent service."""
+    return make_deep_research_service(
+        settings=settings,
+        arxiv_client=arxiv,
+        pdf_parser=pdf_parser,
+        facebook_service=facebook,
+    )
+
+
+FacebookDep = Annotated["FacebookService", Depends(get_facebook_service)]
+DeepResearchDep = Annotated["DeepResearchService", Depends(get_deep_research_service)]

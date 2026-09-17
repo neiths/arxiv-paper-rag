@@ -30,10 +30,12 @@ async def client():
         patch("src.main.make_ollama_client") as mock_ollama,
         patch("src.main.make_langfuse_tracer") as mock_langfuse,
         patch("src.main.make_cache_client") as mock_cache,
+        patch("src.main.make_telegram_service") as mock_telegram,
         patch(
             "src.repositories.paper.PaperRepository.get_by_arxiv_id"
         ) as mock_get_by_id,
     ):
+        mock_telegram.return_value = None
         # Mock startup to do nothing
         mock_startup.return_value = None
 
