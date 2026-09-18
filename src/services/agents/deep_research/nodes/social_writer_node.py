@@ -51,9 +51,12 @@ async def social_writer_node(
         )
 
         response = await llm.ainvoke([HumanMessage(content=prompt)])
-        post_content = str(response.content).strip()
+        from .utils import clean_facebook_post_text, extract_message_text
 
-        logs.append("Facebook post content crafted successfully.")
+        raw_content = extract_message_text(response)
+        post_content = clean_facebook_post_text(raw_content)
+
+        logs.append("Facebook post content crafted and formatted successfully.")
         return {
             "facebook_post": post_content,
             "logs": logs,

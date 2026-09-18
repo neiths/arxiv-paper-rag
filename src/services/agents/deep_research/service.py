@@ -106,6 +106,7 @@ class DeepResearchService:
                 "published_to_facebook": final_state.get(
                     "published_to_facebook", False
                 ),
+                "publish_error": final_state.get("publish_error"),
                 "logs": final_state.get("logs", []),
                 "error": final_state.get("error"),
                 "duration_seconds": round(elapsed, 2),

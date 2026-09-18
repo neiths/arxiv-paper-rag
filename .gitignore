@@ -1,5 +1,8 @@
 # my file
-scripts/
+scripts/*
+!scripts/run_deep_agent.py
+data/arxiv_pdfs/
+*.pdf
 package-lock.json
 package.json
 node_modules
