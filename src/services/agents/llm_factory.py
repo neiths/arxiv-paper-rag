@@ -1,9 +1,7 @@
 import logging
 import os
-from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-
 from src.config import Settings
 from src.services.ollama.client import OllamaClient
 
@@ -29,21 +27,48 @@ def get_agent_llm(
     :param ollama_client: Optional existing OllamaClient instance
     :returns: BaseChatModel instance
     """
-    effective_model = model_name or settings.ollama_model
+    gemini_key = settings.gemini_api_key or os.getenv("GEMINI_API_KEY", "")
+    openai_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY", "")
+
+    # If user didn't specify a model, prioritize configured cloud API keys over local Ollama
+    if not model_name or model_name == settings.ollama_model:
+        if gemini_key:
+            effective_model = "gemini-3.5-flash"
+        elif openai_key:
+            effective_model = "gpt-4o-mini"
+        else:
+            effective_model = settings.ollama_model
+    else:
+        effective_model = model_name
 
     # Check for Gemini models
     if effective_model.lower().startswith("gemini") or (
-        settings.gemini_api_key and "gemini" in effective_model.lower()
+        gemini_key and "gemini" in effective_model.lower()
     ):
+        # Map legacy/common model aliases to active, reliable Gemini models
+        model_aliases = {
+            "gemini": "gemini-3.5-flash",
+            "gemini-1.5-flash": "gemini-3.5-flash",
+            "gemini-2.0-flash": "gemini-3.5-flash",
+            "gemini-2.5-flash": "gemini-3.5-flash",
+            "gemini-3.6-flash": "gemini-3.5-flash",
+            "gemini-3.7-flash": "gemini-3.5-flash",
+            "gemini-flash": "gemini-3.5-flash",
+            "gemini-flash-lite": "gemini-3.5-flash-lite",
+            "gemini-latest": "gemini-flash-latest",
+        }
+        resolved_gemini_model = model_aliases.get(
+            effective_model.lower(), effective_model
+        )
+
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
 
-            api_key = settings.gemini_api_key or os.getenv("GEMINI_API_KEY")
-            logger.info(f"Using Google GenAI model: {effective_model}")
+            logger.info(f"Using Google GenAI model: {resolved_gemini_model}")
             return ChatGoogleGenerativeAI(
-                model=effective_model,
+                model=resolved_gemini_model,
                 temperature=temperature,
-                google_api_key=api_key,
+                google_api_key=gemini_key,
             )
         except ImportError:
             logger.warning(

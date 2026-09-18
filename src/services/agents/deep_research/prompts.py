@@ -63,6 +63,14 @@ PAPER DETAILS:
 - ArXiv URL: {paper_url}
 - Authors: {authors}
 
+CRITICAL FORMATTING INSTRUCTIONS FOR FACEBOOK:
+- The Facebook feed does NOT support Markdown syntax. Do NOT write markdown syntax.
+- DO NOT use markdown headers (NO '#', '##', '###'). Instead, use emojis followed by UPPERCASE or clean Title Case for section headings (e.g. 💡 THE INNOVATION, 📊 KEY BENCHMARKS, 🛠️ PRACTICAL TAKEAWAY).
+- DO NOT use horizontal dividing lines (NO '---' or '***'). Use clean double line breaks to separate paragraphs.
+- DO NOT use markdown links (NO '[title](url)'). Write out the plain URL directly (e.g. Paper link: {paper_url}).
+- DO NOT use markdown code blocks or backticks.
+- Format lists with eye-catching emojis (👉, 🔹, •) instead of raw asterisks.
+
 REQUIREMENTS FOR THE FACEBOOK POST:
 1. HOOK: Start with an attention-grabbing headline with an emoji (🚀, 🧠, ⚡) highlighting the core breakthrough (NO cheap clickbait, make it genuinely exciting for developers/researchers).
 2. THE PAIN POINT: 1-2 concise sentences explaining why existing approaches were broken or limited.

@@ -19,6 +19,12 @@ from src.schemas.arxiv.paper import ArxivPaper
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_ARXIV_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+}
+
 
 class ArxivClient:
     """Client for fetching papers from arXiv API."""
@@ -26,6 +32,7 @@ class ArxivClient:
     def __init__(self, settings: ArxivSettings):
         self._settings = settings
         self._last_request_time: float | None = None
+        self.headers = DEFAULT_ARXIV_HEADERS
 
     @cached_property
     def pdf_cache_dir(self) -> Path:
@@ -69,14 +76,20 @@ class ArxivClient:
 
         self._last_request_time = time.time()
 
-        max_retries = self._settings.download_max_retries
+        max_retries = max(3, self._settings.download_max_retries)
+        last_error = None
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                async with httpx.AsyncClient(
+                    timeout=self.timeout_seconds,
+                    headers=self.headers,
+                    follow_redirects=True,
+                ) as client:
                     response = await client.get(url)
                     response.raise_for_status()
                     return response.text
             except (httpx.ConnectError, httpx.NetworkError) as e:
+                last_error = e
                 if attempt < max_retries - 1:
                     wait_time = self._settings.download_retry_delay_base * (attempt + 1)
                     logger.warning(
@@ -85,6 +98,26 @@ class ArxivClient:
                     await asyncio.sleep(wait_time)
                 else:
                     raise
+            except httpx.HTTPStatusError as e:
+                last_error = e
+                if (
+                    e.response.status_code in (406, 429, 500, 502, 503, 504)
+                    and attempt < max_retries - 1
+                ):
+                    wait_time = max(
+                        3.0, self._settings.download_retry_delay_base * (attempt + 1)
+                    )
+                    logger.warning(
+                        f"arXiv HTTP {e.response.status_code} (attempt {attempt + 1}/{max_retries}). Retrying in {wait_time}s..."
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    raise
+        if last_error:
+            raise last_error
+        raise ArxivAPIException(
+            f"Failed to fetch XML from arXiv after {max_retries} attempts."
+        )
 
     async def fetch_papers(
         self,
@@ -226,6 +259,69 @@ class ArxivClient:
                 f"Unexpected error fetching papers from arXiv: {e}"
             ) from e
 
+    async def _scrape_paper_abs(self, arxiv_id: str) -> ArxivPaper | None:
+        """Fallback to scrape metadata from arxiv.org/abs page if API is unavailable."""
+        from bs4 import BeautifulSoup
+
+        clean_id = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
+        url = f"https://arxiv.org/abs/{clean_id}"
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.timeout_seconds,
+                headers=self.headers,
+                follow_redirects=True,
+            ) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    return None
+                soup = BeautifulSoup(resp.text, "html.parser")
+
+                title_el = soup.find("h1", class_="title")
+                title = (
+                    title_el.text.replace("Title:", "").strip()
+                    if title_el
+                    else clean_id
+                )
+
+                abstract_el = soup.find("blockquote", class_="abstract")
+                abstract = (
+                    abstract_el.text.replace("Abstract:", "").strip()
+                    if abstract_el
+                    else ""
+                )
+
+                authors_div = soup.find("div", class_="authors")
+                authors = (
+                    [a.text.strip() for a in authors_div.find_all("a")]
+                    if authors_div
+                    else ["Unknown"]
+                )
+
+                subjects_td = soup.find("td", class_="tablecell subjects")
+                categories = (
+                    [s.strip() for s in subjects_td.text.split(";")]
+                    if subjects_td
+                    else ["cs.AI"]
+                )
+
+                dateline = soup.find("div", class_="dateline")
+                published_date = dateline.text.strip() if dateline else ""
+
+                pdf_url = f"https://arxiv.org/pdf/{clean_id}.pdf"
+
+                return ArxivPaper(
+                    arxiv_id=clean_id,
+                    title=title,
+                    authors=authors,
+                    abstract=abstract,
+                    categories=categories,
+                    published_date=published_date,
+                    pdf_url=pdf_url,
+                )
+        except Exception as e:
+            logger.warning(f"Failed to scrape abstract page for {arxiv_id}: {e}")
+            return None
+
     async def fetch_paper_by_id(self, arxiv_id: str) -> ArxivPaper | None:
         """
         Fetch a specific paper by its arXiv ID.
@@ -246,34 +342,28 @@ class ArxivClient:
         url = f"{self.base_url}?{urlencode(params, quote_via=quote, safe=safe)}"
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                xml_data = response.text
-
+            xml_data = await self._fetch_xml_with_retry(url)
             papers = self._parse_response(xml_data)
-
             if papers:
                 return papers[0]
-            else:
-                logger.warning(f"Paper {arxiv_id} not found")
-                return None
-
-        except httpx.TimeoutException as e:
-            logger.error(f"arXiv API timeout for paper {arxiv_id}: {e}")
-            raise ArxivAPITimeoutError(
-                f"arXiv API request timed out for paper {arxiv_id}: {e}"
-            ) from e
-        except httpx.HTTPStatusError as e:
-            logger.error(f"arXiv API HTTP error for paper {arxiv_id}: {e}")
-            raise ArxivAPIException(
-                f"arXiv API returned error {e.response.status_code} for paper {arxiv_id}: {e}"
-            ) from e
+            logger.warning(
+                f"Paper {arxiv_id} not found in API, trying abstract page fallback..."
+            )
         except Exception as e:
-            logger.error(f"Failed to fetch paper {arxiv_id} from arXiv: {e}")
-            raise ArxivAPIException(
-                f"Unexpected error fetching paper {arxiv_id} from arXiv: {e}"
-            ) from e
+            logger.warning(
+                f"arXiv API error for paper {arxiv_id}: {e}. Falling back to web scraping..."
+            )
+
+        # Fallback: scrape directly from paper abstract HTML page
+        paper = await self._scrape_paper_abs(clean_id)
+        if paper:
+            logger.info(
+                f"Successfully retrieved paper {arxiv_id} via abstract page fallback."
+            )
+            return paper
+
+        logger.warning(f"Paper {arxiv_id} not found on arXiv.")
+        return None
 
     def _parse_response(self, xml_data: str) -> list[ArxivPaper]:
         """
@@ -490,7 +580,11 @@ class ArxivClient:
         for attempt in range(max_retries):
             try:
                 async with (
-                    httpx.AsyncClient(timeout=float(self.timeout_seconds)) as client,
+                    httpx.AsyncClient(
+                        timeout=float(self.timeout_seconds),
+                        headers=self.headers,
+                        follow_redirects=True,
+                    ) as client,
                     client.stream("GET", url) as response,
                 ):
                     response.raise_for_status()

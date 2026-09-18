@@ -33,7 +33,9 @@ async def topic_research_node(
     try:
         prompt_content = TOPIC_DECOMPOSITION_PROMPT.format(topic=topic)
         response = await llm.ainvoke([HumanMessage(content=prompt_content)])
-        response_text = str(response.content)
+        from .utils import extract_message_text
+
+        response_text = extract_message_text(response)
 
         # Attempt to parse JSON response
         start_idx = response_text.find("{")

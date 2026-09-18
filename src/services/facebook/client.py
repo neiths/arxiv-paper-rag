@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 from src.config import FacebookSettings
 
+from .formatter import clean_facebook_post_text
 from .models import FacebookPageInfo, FacebookPostResponse
 
 logger = logging.getLogger(__name__)
@@ -22,11 +23,47 @@ class FacebookClient:
         self.access_token = settings.page_access_token
         self.enabled = settings.enabled
         self.dry_run = settings.dry_run
+        self._cached_page_token: str | None = None
 
     @property
     def is_configured(self) -> bool:
         """Check whether credentials and page ID are provided."""
         return bool(self.page_id and self.access_token)
+
+    async def get_effective_token(self) -> str:
+        """Return the effective Page Access Token.
+
+        If a User Access Token is configured, this method automatically exchanges
+        it via `/me/accounts` for the Page Access Token matching `self.page_id`.
+        """
+        if self._cached_page_token:
+            return self._cached_page_token
+
+        if not self.access_token:
+            return ""
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(
+                    f"{self.base_url}/{self.api_version}/me/accounts",
+                    params={"access_token": self.access_token},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for page in data.get("data", []):
+                        if str(page.get("id")) == str(self.page_id):
+                            page_token = page.get("access_token")
+                            if page_token:
+                                logger.info(
+                                    f"Automatically resolved Page Access Token for Facebook Page ID {self.page_id}"
+                                )
+                                self._cached_page_token = page_token
+                                return page_token
+        except Exception as e:
+            logger.warning(f"Could not query /me/accounts for page token: {e}")
+
+        self._cached_page_token = self.access_token
+        return self._cached_page_token
 
     async def get_page_info(self) -> FacebookPageInfo:
         """Verify token and fetch Facebook Page metadata."""
@@ -42,10 +79,11 @@ class FacebookClient:
                 ),
             )
 
+        token = await self.get_effective_token()
         url = f"{self.base_url}/{self.api_version}/{self.page_id}"
         params = {
             "fields": "id,name",
-            "access_token": self.access_token,
+            "access_token": token,
         }
 
         try:
@@ -106,9 +144,11 @@ class FacebookClient:
             )
 
         url = f"{self.base_url}/{self.api_version}/{self.page_id}/feed"
+        token = await self.get_effective_token()
+        clean_message = clean_facebook_post_text(message)
         payload: dict[str, Any] = {
-            "message": message,
-            "access_token": self.access_token,
+            "message": clean_message,
+            "access_token": token,
         }
         if link:
             payload["link"] = link
@@ -183,19 +223,21 @@ class FacebookClient:
             )
 
         url = f"{self.base_url}/{self.api_version}/{self.page_id}/photos"
+        token = await self.get_effective_token()
+        clean_caption = clean_facebook_post_text(caption)
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 if image_path and Path(image_path).exists():
                     with open(image_path, "rb") as f:
                         files = {"source": (Path(image_path).name, f, "image/jpeg")}
-                        data = {"caption": caption, "access_token": self.access_token}
+                        data = {"caption": clean_caption, "access_token": token}
                         response = await client.post(url, data=data, files=files)
                 elif image_url:
                     data = {
-                        "caption": caption,
+                        "caption": clean_caption,
                         "url": image_url,
-                        "access_token": self.access_token,
+                        "access_token": token,
                     }
                     response = await client.post(url, data=data)
                 else:

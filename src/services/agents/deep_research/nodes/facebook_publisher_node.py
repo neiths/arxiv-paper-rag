@@ -68,7 +68,7 @@ async def facebook_publisher_node(
             return {
                 "published_to_facebook": False,
                 "facebook_post_id": None,
-                "error": err_msg,
+                "publish_error": err_msg,
                 "logs": logs,
             }
 
@@ -79,6 +79,6 @@ async def facebook_publisher_node(
         return {
             "published_to_facebook": False,
             "facebook_post_id": None,
-            "error": err_msg,
+            "publish_error": err_msg,
             "logs": logs,
         }

@@ -61,7 +61,9 @@ async def deep_analysis_node(
             )
 
         response = await llm.ainvoke([HumanMessage(content=prompt)])
-        synthesis_report = str(response.content).strip()
+        from .utils import extract_message_text
+
+        synthesis_report = extract_message_text(response)
 
         logs.append("Completed deep technical synthesis report.")
         return {
