@@ -362,9 +362,8 @@ class ArxivClient:
             )
             return paper
 
-        raise ArxivAPIException(
-            f"Failed to fetch paper {arxiv_id} from both arXiv API and abstract page."
-        )
+        logger.warning(f"Paper {arxiv_id} not found on arXiv.")
+        return None
 
     def _parse_response(self, xml_data: str) -> list[ArxivPaper]:
         """

@@ -9,10 +9,7 @@ from src.services.facebook.formatter import (
 
 def extract_message_text(response: Any) -> str:
     """Safely extract plain text from LangChain message response across all LLM providers."""
-    if hasattr(response, "text") and response.text:
-        return str(response.text).strip()
-
-    content = getattr(response, "content", response)
+    content = getattr(response, "content", None)
     if isinstance(content, str):
         return content.strip()
 
@@ -25,7 +22,14 @@ def extract_message_text(response: Any) -> str:
                 parts.append(str(item["text"]))
         return "".join(parts).strip()
 
-    return str(content).strip()
+    text_attr = getattr(response, "text", None)
+    if isinstance(text_attr, str) and text_attr:
+        return text_attr.strip()
+
+    if isinstance(response, str):
+        return response.strip()
+
+    return str(content if content is not None else response).strip()
 
 
 __all__ = [
